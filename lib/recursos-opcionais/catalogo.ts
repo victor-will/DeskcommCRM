@@ -146,6 +146,14 @@ const TEXTO_DO_MODULO: Record<ModuloOpcional, { nome: string; oQueFaz: string }>
     oQueFaz:
       "Agrupa os atendentes da Equipe por área e distribui as conversas que têm setor definido entre quem atende aquela área, dentro do horário do setor. Conversa sem setor continua indo pelo número, como antes.",
   },
+  // Menu de texto no WhatsApp sem IA — a linha do módulo em "Recursos opcionais".
+  // `TEXTO_DO_MODULO` é `Record<ModuloOpcional, …>` exaustivo: sem esta chave o
+  // `pnpm typecheck` reprova (TS2741), e a área perderia o que o módulo faz.
+  menu_whatsapp: {
+    nome: "Menu no WhatsApp (sem IA)",
+    oQueFaz:
+      "Um menu de opções em texto que o cliente escolhe respondendo com número, sem IA no caminho: horários, preços, marcação de horário e passagem para um atendente, direto na conversa.",
+  },
 };
 
 /**

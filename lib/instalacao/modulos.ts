@@ -63,12 +63,16 @@ export const MODULOS_OPCIONAIS = [
   "cobranca",
   "login_codex",
   "setores",
+  // Menu de texto no WhatsApp sem IA (ADR-0002): as tabelas `menu_itens` e
+  // `menu_sessoes` nascem pela provisionadora (`fn_menu_whatsapp_provisionar`),
+  // então a fonte da verdade é `modulos_instalados`, como os honorários.
+  "menu_whatsapp",
 ] as const;
 export type ModuloOpcional = (typeof MODULOS_OPCIONAIS)[number];
 
 /** Os módulos de tabela do ADR-0002 dentro de `MODULOS_OPCIONAIS` — resolvidos por
  * `modulos_instalados.estado = 'ativo'`, nunca por `platform_config`. */
-const MODULOS_DE_TABELA = ["honorarios", "financeiro"] as const satisfies readonly ModuloOpcional[];
+const MODULOS_DE_TABELA = ["honorarios", "financeiro", "menu_whatsapp"] as const satisfies readonly ModuloOpcional[];
 
 /**
  * Só os módulos por FLAG — os que a tela `/admin/sistema` liga e desliga via

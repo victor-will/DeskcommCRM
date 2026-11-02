@@ -17219,6 +17219,13 @@ export const DICIONARIO: Traducoes = {
   "A comanda do atendimento: itens, forma de pagamento, comissões e fidelidade. O caixa continua no sistema mesmo sem este módulo. Toda instalação anterior a esta versão continua com Comandas ligada.": {
     es: "La orden de servicio de la atención: ítems, forma de pago, comisiones y fidelidad. La caja sigue en el sistema aun sin este módulo. Toda instalación anterior a esta versión sigue con Órdenes de servicio activado.",
   },
+  // A linha do módulo `menu_whatsapp` em `MODULOS_OPCIONAIS`
+  // (`lib/recursos-opcionais/catalogo.ts`) — mesma regra da de cima: sem estas
+  // chaves o teste "todo texto do catálogo tem espanhol" reprova.
+  "Menu no WhatsApp (sem IA)": { es: "Menú en WhatsApp (sin IA)" },
+  "Um menu de opções em texto que o cliente escolhe respondendo com número, sem IA no caminho: horários, preços, marcação de horário e passagem para um atendente, direto na conversa.": {
+    es: "Un menú de opciones en texto que el cliente elige respondiendo con un número, sin IA en el camino: horarios, precios, marcación de horario y paso a un atendente, directo en la conversación.",
+  },
   "Decide o que acontece quando uma empresa passa do teto de gasto de IA.": { es: "Decide qué pasa cuando una empresa supera el tope de gasto de IA." },
   "Recusa a entrega de mensagem do WhatsApp que não vier assinada.": { es: "Rechaza la entrega de mensajes de WhatsApp que no lleguen firmados." },
   "Acrescenta o texto de divulgação à primeira mensagem, ou bloqueia o envio sem ele.": { es: "Agrega el texto de divulgación al primer mensaje, o bloquea el envío sin él." },

@@ -35,6 +35,19 @@ export const CATALOGO_DE_MODULOS: readonly ModuloCatalogo[] = [
       "continua no sistema mesmo sem este módulo. Toda instalação anterior a esta versão " +
       "continua com Comandas ligada.",
   },
+  {
+    // As tabelas `menu_itens` e `menu_sessoes` nascem pela provisionadora
+    // (`fn_menu_whatsapp_provisionar`), só onde o módulo é instalado (ADR-0002):
+    // sem esta linha `service.ts` recusa o slug fora do catálogo e não há como
+    // instalar o menu em lugar nenhum.
+    slug: "menu_whatsapp",
+    nome: "Menu no WhatsApp (sem IA)",
+    descricao:
+      "Um menu de opções em texto que o cliente escolhe respondendo com número, sem nenhuma " +
+      "IA no caminho: horários, preços, marcação de horário e passagem para um atendente, " +
+      "direto na conversa. Os itens podem ser texto fixo ou consulta à agenda na hora, e o " +
+      "dono do negócio os monta pela tela do módulo.",
+  },
 ];
 
 export function moduloDoCatalogo(slug: string): ModuloCatalogo | undefined {

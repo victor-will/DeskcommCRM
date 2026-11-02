@@ -18,6 +18,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -29,7 +31,7 @@ import {
 import { caminhoDaPorta, ondeOModuloAparece } from "@/lib/navigation/onde-o-modulo-aparece";
 import { MODULOS_NA_TELA } from "@/app/admin/(protected)/sistema/_form";
 import { combinarInterfaces, destinosDaInterface, permitidos } from "@/lib/navigation/interface";
-import { MODULOS_OPCIONAIS, type ModuloOpcional } from "@/lib/instalacao/modulos";
+import { MODULOS_OPCIONAIS, moduloLigado, type ModuloOpcional } from "@/lib/instalacao/modulos";
 
 /**
  * ⚠️ `NAV_CATALOG` é UNIÃO DE TIPOS LITERAIS, não `NavMetadata[]`: cada entrada tem só os
@@ -421,5 +423,53 @@ describe("as frestas das guardas de caminho e da regra do menu", () => {
     );
     expect(comHub).toBeDefined();
     expect(sobeAoMenuLateral(comHub!, true)).toBe(false);
+  });
+});
+
+/**
+ * ⚠️ O MECANISMO POR BAIXO DA PORTA para módulo de TABELA (ADR-0002) — e por que ele
+ * mora neste arquivo, que é o que mede "ligar o módulo acende a porta".
+ *
+ * `menu_whatsapp` não tem chave em `platform_config` (não é módulo por flag): ele só
+ * existe para `moduloLigado` quando `modulos_instalados` tem a linha com
+ * `estado='ativo'`, escrita só por `fn_modulo_instalar` (`/admin/modulos`). Sem a
+ * linha = DESLIGADO, falha fechada — é o mesmo contrato dos casos de `honorarios` e
+ * `financeiro` em `lib/instalacao/modulos.test.ts`, do qual o banco falso abaixo é
+ * moldado (builder por tabela, `select().in().eq()` resolvendo na mesma promessa).
+ *
+ * O caso mede as DUAS pontas: sem linha devolve `false`; com `estado='ativo'` devolve
+ * `true`. A segunda ponta é a que reprova enquanto o slug não estiver em
+ * `MODULOS_DE_TABELA` — a linha até pode existir no banco, mas se a lista não o
+ * inclui a porta continua fechada.
+ */
+type RespostaDeModulo = { data?: unknown; error?: unknown } | Error;
+
+function bancoDeModulos(porTabela: Record<string, RespostaDeModulo> = {}) {
+  const from = (table: string) => {
+    const resposta = porTabela[table] ?? { data: [], error: null };
+    const resolver = () =>
+      resposta instanceof Error
+        ? Promise.reject(resposta)
+        : Promise.resolve({ data: resposta.data ?? null, error: resposta.error ?? null });
+    const builder = {
+      select: () => builder,
+      in: () => builder,
+      eq: () => builder,
+      then: (onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
+        resolver().then(onFulfilled, onRejected),
+    };
+    return builder;
+  };
+  return { db: { from } as unknown as SupabaseClient };
+}
+
+describe("menu_whatsapp: módulo de tabela, resolvido por modulos_instalados", () => {
+  it("moduloLigado devolve false sem linha em modulos_instalados (fail-closed) e true com estado='ativo'", async () => {
+    expect(await moduloLigado(bancoDeModulos().db, "menu_whatsapp")).toBe(false);
+
+    const ativo = [{ modulo: "menu_whatsapp", estado: "ativo" }];
+    expect(
+      await moduloLigado(bancoDeModulos({ modulos_instalados: { data: ativo } }).db, "menu_whatsapp"),
+    ).toBe(true);
   });
 });
