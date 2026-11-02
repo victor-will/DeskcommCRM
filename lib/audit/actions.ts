@@ -1411,6 +1411,12 @@ export const AUDIT_ACTIONS = [
   // sugestão, e quando". A fila guarda o usuário, mas a trilha é o rastro que a
   // organização consulta, e só ela tem o mesmo formato das outras ações de contato.
   "contact.duplicate_dismissed",
+  // Ativação do menu de texto em 3 camadas (plano Task 6): o toggle do cliente
+  // em Configurações (ligou/desligou) e a concessão da instalação (quem
+  // concedeu, e qual recurso). O metadata leva só a decisão — nunca texto de
+  // conversa nem telefone.
+  "settings.menu_updated",
+  "recursos_org.concedido_alterado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

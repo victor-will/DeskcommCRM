@@ -5450,6 +5450,7 @@ export type Database = {
           oferecido_ao_cliente: boolean;
           padrao_no_cadastro: boolean;
           preco_cents: number;
+          recursos: string[];
           teto_ia_usd_cents: number | null;
           trial_dias: number;
           updated_at: string;
@@ -5468,6 +5469,7 @@ export type Database = {
           oferecido_ao_cliente?: boolean;
           padrao_no_cadastro?: boolean;
           preco_cents: number;
+          recursos?: string[];
           teto_ia_usd_cents?: number | null;
           trial_dias?: number;
           updated_at?: string;
@@ -5485,6 +5487,7 @@ export type Database = {
           oferecido_ao_cliente?: boolean;
           padrao_no_cadastro?: boolean;
           preco_cents?: number;
+          recursos?: string[];
           teto_ia_usd_cents?: number | null;
           trial_dias?: number;
           updated_at?: string;
