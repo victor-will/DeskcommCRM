@@ -54,6 +54,18 @@ function credencialValidada(overrides: Partial<Linha> = {}): Linha {
   };
 }
 
+/** O roteador ativo na sessão, no formato da tabela. */
+function roteadorAtivo(overrides: Partial<Linha> = {}): Linha {
+  return {
+    id: "rot-1",
+    organization_id: ORG,
+    is_active: true,
+    channel_session_id: SESSAO,
+    fallback_agent_id: null,
+    ...overrides,
+  };
+}
+
 /**
  * Client falso no recorte do PostgREST que `trava-da-ia` usa: `eq` compara por
  * caminho pontilhado (o embutido `ai_agent_versions.status` vira o objeto
@@ -71,6 +83,7 @@ function bancoFalso(
 
   function consulta(tabela: string) {
     const eqs: Array<[string, unknown]> = [];
+    const ins: Array<[string, unknown[]]> = [];
     const nulos: string[] = [];
     const naoNulos: string[] = [];
     let limite: number | null = null;
@@ -88,6 +101,7 @@ function bancoFalso(
       const fora = (tabelas[tabela] ?? []).filter(
         (l) =>
           eqs.every(([c, v]) => valor(l, c) === v) &&
+          ins.every(([c, vs]) => vs.includes(valor(l, c))) &&
           nulos.every((c) => valor(l, c) === null || valor(l, c) === undefined) &&
           naoNulos.every((c) => valor(l, c) !== null && valor(l, c) !== undefined),
       );
@@ -98,6 +112,10 @@ function bancoFalso(
       select: () => q,
       eq: (coluna: string, v: unknown) => {
         eqs.push([coluna, v]);
+        return q;
+      },
+      in: (coluna: string, valores: unknown[]) => {
+        ins.push([coluna, valores]);
         return q;
       },
       is: (coluna: string, v: unknown) => {
@@ -116,6 +134,19 @@ function bancoFalso(
         const erro = erroDe(tabela);
         if (erro !== null) return { data: null, error: erro };
         return { data: linhas()[0] ?? null, error: null };
+      },
+      // Consulta de LINHAS VÁRIAS (ai_routers, ai_router_members): o await vem
+      // direto do builder, como no client real.
+      then: (
+        ok: (r: { data: Linha[] | null; error: { message: string } | null }) => unknown,
+        ra?: (e: unknown) => unknown,
+      ) => {
+        const erro = erroDe(tabela);
+        const resposta =
+          erro !== null
+            ? { data: null as Linha[] | null, error: erro }
+            : { data: linhas(), error: null };
+        return Promise.resolve(resposta).then(ok, ra);
       },
     };
     return q;
@@ -310,5 +341,111 @@ describe("falha fechada — erro de leitura cala o menu (ruling do controller)",
   it("erro ao ler o silencio: iaResponderiaASessao devolve true", async () => {
     const db = bancoFalso({ ai_agents: [agentePublicado()] }, { comErroEm: ["conversations"] });
     expect(await iaResponderiaASessao(db, ORG, SESSAO, CONVERSA, AGORA)).toBe(true);
+  });
+});
+
+/**
+ * O roteador — o outro lado do `OR` do portão pg
+ * (`quem-atende-a-sessao.ts:55-96`): uma sessão cuja única atenção é um
+ * roteador ativo (fallback/membros com versão publicada — SEM predicado de
+ * sessão sobre eles, igual ao SQL) recebe resposta da IA, e o menu tem de sair
+ * de perto. Sem este ramo, a Task 5 responderia toda mensagem junto com o
+ * dreno — a resposta dupla que o R1 existe para impedir.
+ */
+describe("espelho do roteador — iaResponderiaASessao cobre o OR do portão", () => {
+  it("router ativo na sessao sem agente direto: iaResponderia devolve true (espelho do roteador)", async () => {
+    // Fallback publicado em OUTRA sessão: o direto não o acha (predicado de
+    // sessão), o roteador sim (SEM predicado de sessão — mesmo SQL de origem).
+    const comFallback = bancoFalso({
+      ai_routers: [roteadorAtivo({ fallback_agent_id: "ag-fb" })],
+      ai_router_members: [],
+      ai_agents: [
+        {
+          id: "ag-fb",
+          organization_id: ORG,
+          archived_at: null,
+          paused_at: null,
+          ai_agent_versions: { status: "published", channel_session_id: SESSAO_OUTRA },
+        },
+      ],
+      ai_provider_credentials: [credencialValidada()],
+    });
+    expect(await iaResponderiaASessao(comFallback, ORG, SESSAO, null, AGORA)).toBe(true);
+
+    // E o outro ramo do OR: router SEM fallback, com membro publicado (também
+    // em outra sessão) — a mesma verdade do SQL.
+    const comMembro = bancoFalso({
+      ai_routers: [roteadorAtivo()],
+      ai_router_members: [
+        { id: "mem-1", router_id: "rot-1", organization_id: ORG, agent_id: "ag-mb" },
+      ],
+      ai_agents: [
+        {
+          id: "ag-mb",
+          organization_id: ORG,
+          archived_at: null,
+          paused_at: null,
+          ai_agent_versions: { status: "published", channel_session_id: SESSAO_OUTRA },
+        },
+      ],
+      ai_provider_credentials: [credencialValidada()],
+    });
+    expect(await iaResponderiaASessao(comMembro, ORG, SESSAO, null, AGORA)).toBe(true);
+  });
+
+  it("router sem agente vivo com versao publicada: iaResponderia devolve false", async () => {
+    // O predicado do portão é vivo + publicado: fallback ARQUIVADO e membro em
+    // versão RASCUNHO não abrem o portão — o menu assume.
+    const mortos = bancoFalso({
+      ai_routers: [roteadorAtivo({ fallback_agent_id: "ag-morto" })],
+      ai_router_members: [
+        { id: "mem-1", router_id: "rot-1", organization_id: ORG, agent_id: "ag-rascunho" },
+      ],
+      ai_agents: [
+        {
+          id: "ag-morto",
+          organization_id: ORG,
+          archived_at: "2026-09-01T00:00:00.000Z",
+          paused_at: null,
+          ai_agent_versions: { status: "published", channel_session_id: SESSAO },
+        },
+        {
+          id: "ag-rascunho",
+          organization_id: ORG,
+          archived_at: null,
+          paused_at: null,
+          ai_agent_versions: { status: "draft", channel_session_id: SESSAO },
+        },
+      ],
+      ai_provider_credentials: [credencialValidada()],
+    });
+    expect(await iaResponderiaASessao(mortos, ORG, SESSAO, null, AGORA)).toBe(false);
+
+    // Router ativo sem fallback e sem membros: nada de quem responda.
+    const vazio = bancoFalso({
+      ai_routers: [roteadorAtivo()],
+      ai_router_members: [],
+      ai_agents: [],
+      ai_provider_credentials: [credencialValidada()],
+    });
+    expect(await iaResponderiaASessao(vazio, ORG, SESSAO, null, AGORA)).toBe(false);
+  });
+
+  it("erro ao ler o roteador: iaResponderiaASessao devolve true (falha fechada)", async () => {
+    const semRoteadores = bancoFalso(
+      { ai_agents: [], ai_provider_credentials: [credencialValidada()] },
+      { comErroEm: ["ai_routers"] },
+    );
+    expect(await iaResponderiaASessao(semRoteadores, ORG, SESSAO, null, AGORA)).toBe(true);
+
+    const semMembros = bancoFalso(
+      {
+        ai_routers: [roteadorAtivo({ fallback_agent_id: "ag-fb" })],
+        ai_agents: [],
+        ai_provider_credentials: [credencialValidada()],
+      },
+      { comErroEm: ["ai_router_members"] },
+    );
+    expect(await iaResponderiaASessao(semMembros, ORG, SESSAO, null, AGORA)).toBe(true);
   });
 });
