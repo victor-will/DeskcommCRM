@@ -209,6 +209,28 @@ const PROVA_DE_MODULO: Record<string, { readonly arquivo: string; readonly razao
       "lista org-scoped: vizinho vê zero movimentações. A leitura é medida aqui; a decisão de " +
       "NÃO redigir (razão `manter` do #1504) mora no redact-unificado, e é outra régua.",
   },
+  // Task 1 do plano do menu (2026-11-01) — as duas tabelas de
+  // `fn_menu_whatsapp_provisionar()` (migration 9079). A prova comportamental
+  // é do próprio módulo: JWT real, linha REAL nas duas organizações e
+  // contagem cross-org nas DUAS direções (o arquivo também cobre escrita
+  // manager+ e anon sem privilégio).
+  menu_itens: {
+    arquivo: "tests/invariants/menu-rls.test.ts",
+    razao:
+      "JWT real (`set role authenticated` + claims): membro lê e escreve os itens da própria " +
+      "organização (insert/update/delete), outra organização não lê nem escreve — contagem " +
+      "cross-org = 0 nas duas direções e insert recusado —, agent não escreve (manager+, molde " +
+      "de automation_rules) e anon recebe permission denied. Item REAL semeado por organização, " +
+      "sem o qual a contagem seria 0 = 0 por ausência de dado.",
+  },
+  menu_sessoes: {
+    arquivo: "tests/invariants/menu-rls.test.ts",
+    razao:
+      "Mesmo arquivo: sessão do contato semeada nas DUAS organizações, membro lê e atualiza só a " +
+      "própria, o vizinho conta zero em ambas as direções (inclusive o update cross-org, que a " +
+      "policy recusa no with check) e anon é negado no privilégio. Vazar o estado expõe em qual " +
+      "nível da máquina o contato está e a quem a conversa pertence.",
+  },
 };
 
 /* ── probe 1: a varredura de RLS, copiada do irmão (rls-completude-varredura.test.ts) ── */

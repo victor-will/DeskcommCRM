@@ -100,6 +100,14 @@ const ALLOWLIST: Record<string, string> = {
     "quantidade, reason em vocabulário do programa e idempotency_key são dado " +
     "do programa de fidelidade, e a pessoa por trás já está anônima na cascata " +
     "(contact_id vira contato anonimizado, não contato legível).",
+  "menu_whatsapp.menu_sessoes":
+    "Task 1 do plano do menu (2026-11-01, migration 9079): a régua cai pela FK " +
+    "direta para contacts, não por dado pessoal — a tabela guarda só ids " +
+    "técnicos (organization_id, contact_id, conversation_id, channel_session_id) " +
+    "e o estado da máquina (estado/dados), nenhum texto da pessoa. Não há coluna " +
+    "a redigir na anonimização, e zerar estado/dados quebraria a máquina sem " +
+    "proteger ninguém; no apagamento do contato a linha some em cascata " +
+    "(on delete cascade).",
 };
 
 /**
