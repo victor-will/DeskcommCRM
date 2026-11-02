@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatarDia, formatarPreco, proximoPasso, type ServicoDoMenu } from "./maquina";
+import {
+  type ItemDoMenu,
+  formatarDia,
+  formatarPreco,
+  proximoPasso,
+  type ServicoDoMenu,
+} from "./maquina";
 
 /**
  * Máquina de estados pura do menu de texto (spec §6.1 + P5 + G1 + G4).
@@ -56,6 +62,7 @@ interface ContextoDeTeste {
   diasComVaga: Array<{ data: string; rotulo: string }>;
   horariosDoDia: string[];
   linkAgenda?: string;
+  itens?: ItemDoMenu[];
 }
 
 function contexto(parcial: Partial<ContextoDeTeste> = {}): ContextoDeTeste {
@@ -270,5 +277,136 @@ describe("proximoPasso — máquina de estados pura do menu", () => {
     const noIdle = proximoPasso({ estado: "idle", dados: {}, texto: "" }, contexto());
     expect(noIdle.resposta).toBeNull();
     expect(noIdle.estado).toBe("idle");
+  });
+});
+
+/**
+ * Itens customizados vindo de `menu_itens` (ruling do controller na Task 5):
+ * `contexto.itens` é OPCIONAL e só muda o passo `menu` — 3 e 0 seguem sendo
+ * da máquina (precedência travada na Task 7), os outros números vão ao item
+ * pela `ordem`, e SEM `itens` o cardápio é o G4 fixo de sempre (os 11 casos
+ * acima provam o fallback por continuarem verdes).
+ */
+describe("itens customizados de menu_itens — contexto.itens", () => {
+  const ITENS = [
+    {
+      ordem: 5,
+      rotulo: "Pacote de verão",
+      tipo: "texto" as const,
+      resposta_texto: "O pacote sai por R$ 199,00.",
+    },
+    {
+      ordem: 1,
+      rotulo: "Horários de hoje",
+      tipo: "consulta" as const,
+      consulta: "horarios_hoje" as const,
+    },
+    {
+      ordem: 2,
+      rotulo: "Agenda online",
+      tipo: "consulta" as const,
+      consulta: "link_agenda" as const,
+    },
+    {
+      ordem: 3,
+      rotulo: "Marcar com a Ana",
+      tipo: "texto" as const,
+      resposta_texto: "A Ana atende às terças.",
+    },
+  ];
+
+  it("com itens presentes o menu exibe os rotulos customizados na ordem deles", () => {
+    const saida = proximoPasso(
+      { estado: "idle", dados: {}, texto: "oi" },
+      contexto({ itens: ITENS }),
+    );
+    expect(saida.estado).toBe("menu");
+    const linhas = (saida.resposta ?? "").split("\n");
+    expect(linhas[0]).toBe("Olá! Pra eu te ajudar mais rápido, responda com o número:");
+    // Ordem CRESCENTE independente da ordem do array, e o rótulo é o do BANCO.
+    expect(linhas.slice(1)).toEqual([
+      "1 — Horários de hoje",
+      "2 — Agenda online",
+      "3 — Marcar com a Ana",
+      "5 — Pacote de verão",
+    ]);
+    // O G4 fixo não aparece onde o dono já definir o cardápio.
+    expect(saida.resposta).not.toContain("0 — Falar com alguém");
+    expect(saida.resposta).not.toContain("Preços dos serviços");
+  });
+
+  it("item customizado respondido pelo numero; 3 e 0 continuam sendo da maquina", () => {
+    // Texto do item: a resposta é a que o dono escreveu.
+    const texto = proximoPasso(
+      { estado: "menu", dados: {}, texto: "5" },
+      contexto({ itens: ITENS }),
+    );
+    expect(texto.resposta).toBe("O pacote sai por R$ 199,00.");
+    expect(texto.estado).toBe("menu");
+
+    // Precedência: a tecla 3 é da MÁQUINA mesmo com item de ordem 3 no banco.
+    const tres = proximoPasso(
+      { estado: "menu", dados: {}, texto: "3" },
+      contexto({ itens: ITENS }),
+    );
+    expect(tres.estado).toBe("aguardando_servico");
+    expect(tres.resposta).not.toContain("Marcar com a Ana");
+
+    // E a tecla 0 também: o item não existe nem seria alcançado.
+    const zero = proximoPasso(
+      { estado: "menu", dados: {}, texto: "0" },
+      contexto({ itens: ITENS }),
+    );
+    expect(zero.resposta).toBe(FALAR_COM_ALGUEM);
+    expect(zero.estado).toBe("idle");
+
+    // `consulta` do item vai para os handlers da máquina: horarios_hoje…
+    const um = proximoPasso(
+      { estado: "menu", dados: {}, texto: "1" },
+      contexto({ itens: ITENS, horariosDoDia: ["09:00", "09:30"] }),
+    );
+    expect(um.resposta).toContain("Horários de hoje");
+    expect(um.resposta).toContain("09:00");
+
+    // …e link_agenda manda o link quando existe (e diz que não existe quando não).
+    const comLink = proximoPasso(
+      { estado: "menu", dados: {}, texto: "2" },
+      contexto({ itens: ITENS, linkAgenda: "https://agenda.exemplo/salao" }),
+    );
+    expect(comLink.resposta).toContain(
+      "→ ou manda o link da agenda online: https://agenda.exemplo/salao",
+    );
+    const semLink = proximoPasso(
+      { estado: "menu", dados: {}, texto: "2" },
+      contexto({ itens: ITENS }),
+    );
+    expect(semLink.resposta).toContain("ainda não está disponível");
+
+    // Número sem item correspondente é opção inválida (o "else" do ruling) —
+    // o cardápio exibido na repetição é o do BANCO, não o G4.
+    const invalido = proximoPasso(
+      { estado: "menu", dados: {}, texto: "7" },
+      contexto({ itens: ITENS }),
+    );
+    expect(invalido.resposta).toContain("Opção inválida");
+    expect(invalido.resposta).toContain("5 — Pacote de verão");
+    expect(invalido.resposta).not.toContain("0 — Falar com alguém");
+  });
+
+  it("sem itens o menu cai no padrao G4 (fallback)", () => {
+    // Ausente…
+    const semItens = proximoPasso({ estado: "idle", dados: {}, texto: "oi" }, contexto());
+    expect(semItens.resposta).toBe(MENU);
+    // …e vazio: cardápio sem linha nenhuma não é cardápio — o G4 é o piso.
+    const vazio = proximoPasso({ estado: "idle", dados: {}, texto: "oi" }, contexto({ itens: [] }));
+    expect(vazio.resposta).toBe(MENU);
+
+    // E os handlers fixos continuam vivos no caminho sem itens.
+    const um = proximoPasso(
+      { estado: "menu", dados: {}, texto: "1" },
+      contexto({ horariosDoDia: ["10:00"] }),
+    );
+    expect(um.resposta).toContain("Horários de hoje");
+    expect(um.resposta).toContain("10:00");
   });
 });

@@ -162,11 +162,15 @@ export const MENSAGEM_DO_LACO_DE_LEAD =
  * barrar, chegando pela porta dos fundos. Quem descobre é UMA função, usada
  * pelo schema (recusa na porta) e pelo motor (defesa em profundidade).
  */
-function tiposDeAcao(actions: readonly { type: string; config?: Record<string, unknown> }[] | undefined): string[] {
+function tiposDeAcao(
+  actions: readonly { type: string; config?: Record<string, unknown> }[] | undefined,
+): string[] {
   const tipos: string[] = [];
   for (const a of actions ?? []) {
     if (a.type === "ai_decide") {
-      const opcoes = Array.isArray(a.config?.opcoes) ? (a.config.opcoes as Array<{ acao?: { type?: unknown } }>) : [];
+      const opcoes = Array.isArray(a.config?.opcoes)
+        ? (a.config.opcoes as Array<{ acao?: { type?: unknown } }>)
+        : [];
       for (const opcao of opcoes) {
         const alvo = typeof opcao?.acao?.type === "string" ? opcao.acao.type : null;
         if (alvo) tipos.push(alvo);
@@ -183,7 +187,8 @@ export function acoesQueFechamLaco(
   triggerEvent: string | undefined,
   actions: readonly { type: string; config?: Record<string, unknown> }[] | undefined,
 ): string[] {
-  if (!triggerEvent || !(GATILHOS_DO_TRIGGER_DE_LEAD as readonly string[]).includes(triggerEvent)) return [];
+  if (!triggerEvent || !(GATILHOS_DO_TRIGGER_DE_LEAD as readonly string[]).includes(triggerEvent))
+    return [];
   const fecham: string[] = [];
   for (const acao of actions ?? []) {
     // A EXCEÇÃO #2769: a porta do ganho. Em `lead.won`, `create_or_move_lead`
@@ -361,7 +366,9 @@ function umRodizioPorRegra(
   let rodizios = 0;
   for (const [indice, acao] of acoes.entries()) {
     if (acao.type === "ai_decide") {
-      const opcoes = (acao.config as { opcoes?: Array<{ acao?: { type: string; config?: unknown } }> }).opcoes ?? [];
+      const opcoes =
+        (acao.config as { opcoes?: Array<{ acao?: { type: string; config?: unknown } }> }).opcoes ??
+        [];
       for (const [k, opcao] of opcoes.entries()) {
         if (opcao.acao && ehRodizio(opcao.acao)) {
           ctx.addIssue({
@@ -374,7 +381,11 @@ function umRodizioPorRegra(
       continue;
     }
     if (ehRodizio(acao) && ++rodizios > 1) {
-      ctx.addIssue({ code: "custom", path: [indice, "config", "modo"], message: MENSAGEM_DO_RODIZIO_FORA_DO_LUGAR });
+      ctx.addIssue({
+        code: "custom",
+        path: [indice, "config", "modo"],
+        message: MENSAGEM_DO_RODIZIO_FORA_DO_LUGAR,
+      });
     }
   }
 }
@@ -393,7 +404,10 @@ function umRodizioPorRegra(
  * Os objetos são os MESMOS de sempre, byte a byte — só mudou onde moram.
  */
 const acoesFixas = [
-  z.object({ type: z.literal("create_or_move_lead"), config: z.object({ pipeline_id: z.string().uuid(), stage_id: z.string().uuid() }) }),
+  z.object({
+    type: z.literal("create_or_move_lead"),
+    config: z.object({ pipeline_id: z.string().uuid(), stage_id: z.string().uuid() }),
+  }),
   z.object({
     type: z.literal("send_whatsapp_message"),
     config: z.object({
@@ -437,52 +451,51 @@ const acoesFixas = [
   // por organização desta ação vale para tudo isso sem mudar uma linha.
   z.object({
     type: z.literal("send_email"),
-    config: z.object({
-      destinatario: z.enum(["contato", "dono_do_lead", "membro_da_equipe", "fixo"]),
-      // O editor guarda o campo como "" (input controlado) quando o modo não
-      // é `fixo`; "" vira AUSÊNCIA aqui, na porta que o editor e a API
-      // dividem, e não um e-mail inválido. Quem EXIGE o endereço é o
-      // `superRefine` abaixo — só no modo `fixo`.
-      email_fixo: z.preprocess(
-        (v) => (v === "" ? undefined : v),
-        z.string().email("E-mail inválido").max(320).optional(),
-      ),
-      // Mesma tolerância de `email_fixo`: o editor deixa o campo em "" quando o
-      // modo não é `membro_da_equipe`. O endereço NÃO mora aqui — só o vínculo;
-      // o e-mail sai do GoTrue da própria pessoa, no disparo.
-      membro_id: z.preprocess(
-        (v) => (v === "" ? undefined : v),
-        z.string().uuid().optional(),
-      ),
-      // Assunto e corpo levam as MESMAS variáveis do WhatsApp: `{{nome}}`,
-      // `{{primeiro_nome}}`, `{{lead.*}}` e o campo do funil (`{{destino}}`).
-      // `{{resumo}}` é a variável desta ação (#2642): o resumo do negócio
-      // montado no disparo, com a pontuação, o motivo e o que a passagem
-      // combinou. Só é resolvida quando o modelo a referencia.
-      assunto: z.string().min(1).max(200),
-      corpo: z.string().min(1).max(5000),
-      // Texto simples (padrão) ou HTML simples — negrito, links e quebras.
-      formato: z.enum(["texto", "html"]).optional(),
-    }).superRefine((config, ctx) => {
-      // Sem isto, `fixo` sem endereço salvaria e só falharia na execução
-      // (`missing_config` em send-email.ts) — a regra "salva" que nunca envia.
-      if (config.destinatario === "fixo" && !config.email_fixo) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["email_fixo"],
-          message: "Informe o endereço de e-mail que recebe os envios desta regra.",
-        });
-      }
-      // Mesma régua do endereço fixo: sem a pessoa escolhida, a regra salvaria
-      // e só falharia no disparo (`sem_membro` em send-email.ts).
-      if (config.destinatario === "membro_da_equipe" && !config.membro_id) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["membro_id"],
-          message: "Escolha a pessoa da equipe que recebe os envios desta regra.",
-        });
-      }
-    }),
+    config: z
+      .object({
+        destinatario: z.enum(["contato", "dono_do_lead", "membro_da_equipe", "fixo"]),
+        // O editor guarda o campo como "" (input controlado) quando o modo não
+        // é `fixo`; "" vira AUSÊNCIA aqui, na porta que o editor e a API
+        // dividem, e não um e-mail inválido. Quem EXIGE o endereço é o
+        // `superRefine` abaixo — só no modo `fixo`.
+        email_fixo: z.preprocess(
+          (v) => (v === "" ? undefined : v),
+          z.string().email("E-mail inválido").max(320).optional(),
+        ),
+        // Mesma tolerância de `email_fixo`: o editor deixa o campo em "" quando o
+        // modo não é `membro_da_equipe`. O endereço NÃO mora aqui — só o vínculo;
+        // o e-mail sai do GoTrue da própria pessoa, no disparo.
+        membro_id: z.preprocess((v) => (v === "" ? undefined : v), z.string().uuid().optional()),
+        // Assunto e corpo levam as MESMAS variáveis do WhatsApp: `{{nome}}`,
+        // `{{primeiro_nome}}`, `{{lead.*}}` e o campo do funil (`{{destino}}`).
+        // `{{resumo}}` é a variável desta ação (#2642): o resumo do negócio
+        // montado no disparo, com a pontuação, o motivo e o que a passagem
+        // combinou. Só é resolvida quando o modelo a referencia.
+        assunto: z.string().min(1).max(200),
+        corpo: z.string().min(1).max(5000),
+        // Texto simples (padrão) ou HTML simples — negrito, links e quebras.
+        formato: z.enum(["texto", "html"]).optional(),
+      })
+      .superRefine((config, ctx) => {
+        // Sem isto, `fixo` sem endereço salvaria e só falharia na execução
+        // (`missing_config` em send-email.ts) — a regra "salva" que nunca envia.
+        if (config.destinatario === "fixo" && !config.email_fixo) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["email_fixo"],
+            message: "Informe o endereço de e-mail que recebe os envios desta regra.",
+          });
+        }
+        // Mesma régua do endereço fixo: sem a pessoa escolhida, a regra salvaria
+        // e só falharia no disparo (`sem_membro` em send-email.ts).
+        if (config.destinatario === "membro_da_equipe" && !config.membro_id) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["membro_id"],
+            message: "Escolha a pessoa da equipe que recebe os envios desta regra.",
+          });
+        }
+      }),
   }),
   z.object({
     type: z.literal("add_tag"),
@@ -555,10 +568,7 @@ const acoesFixas = [
       /** Título com `{{lead.title}}` e `{{contact.name}}`. */
       titulo: z.string().min(1).max(200),
       vence_em_dias: z.number().int().min(0).max(365),
-      atribuir_a: z.union([
-        z.literal("dono_do_lead"),
-        z.object({ usuario_id: z.string().uuid() }),
-      ]),
+      atribuir_a: z.union([z.literal("dono_do_lead"), z.object({ usuario_id: z.string().uuid() })]),
       prioridade: z.enum(["low", "medium", "high", "urgent"]),
     }),
   }),
@@ -616,6 +626,10 @@ const acoesFixas = [
       canal: z.literal("whatsapp"),
     }),
   }),
+  // Menu de texto sem IA (Task 5 do plano): `config: {}` sem campos — o menu
+  // lê tudo do evento (`body_preview`, contato, sessão) e do banco; nada de
+  // configuração colada na regra.
+  z.object({ type: z.literal("menu_responder"), config: z.object({}).optional() }),
 ] as const;
 
 /**
@@ -671,7 +685,8 @@ export const aiDecideSchema = z.object({
             ctx.addIssue({
               code: "custom",
               path: [indice, "id"],
-              message: "Cada opção precisa de um id único: é o id que a IA escolhe e o que a execução acerta.",
+              message:
+                "Cada opção precisa de um id único: é o id que a IA escolhe e o que a execução acerta.",
             });
           }
           vistos.add(opcao.id);
@@ -838,7 +853,8 @@ function exigirConfigDosGatilhosDeTempo(
     ctx.addIssue({
       code: "custom",
       path: ["trigger_config"],
-      message: "Escolha há quantos dias de silêncio e de quem é o silêncio (equipe, cliente ou qualquer).",
+      message:
+        "Escolha há quantos dias de silêncio e de quem é o silêncio (equipe, cliente ou qualquer).",
     });
     return;
   }
@@ -890,7 +906,10 @@ export const updateAutomationRuleSchema = z
     // O PATCH que troca o gatilho PARA um dos gatilhos por tempo, sem mandar a
     // configuração, produz o mesmo calado da criação (#1540): regra salva que
     // a varredura não sabe avaliar.
-    exigirConfigDosGatilhosDeTempo(patch as { trigger_event: string; trigger_config?: Record<string, unknown> }, ctx);
+    exigirConfigDosGatilhosDeTempo(
+      patch as { trigger_event: string; trigger_config?: Record<string, unknown> },
+      ctx,
+    );
   })
   .superRefine(exigirIdDaFonteWebhook)
   .superRefine(recusarLimitePorContatoTorto)

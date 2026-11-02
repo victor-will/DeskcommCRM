@@ -13,8 +13,10 @@
  *   produto registrada; se um dia quiser gatilho por palavra, é 1 linha aqui).
  *   Em `menu`: 1 = horários de hoje, 2 = preços, 3 = máquina de agendamento
  *   (P5), 0 = falar com alguém. As teclas 3 e 0 são da MÁQUINA — precedência
- *   sobre qualquer item de `menu_itens` (decisão travada na Task 7), e este
- *   módulo nem recebe itens: o cardápio fixo é o G4.
+ *   sobre qualquer item de `menu_itens` (decisão travada na Task 7). Os demais
+ *   números vão ao item pela `ordem` quando `contexto.itens` vem do banco
+ *   (ruling da Task 5); sem itens — ou com a lista vazia — o cardápio é o G4
+ *   fixo de sempre.
  *
  * ─── Regras que este arquivo inteiro honra ──────────────────────────────────
  *
@@ -55,6 +57,19 @@ export interface ServicoDoMenu {
   preco_cents: number | null;
 }
 
+/**
+ * Uma linha de `menu_itens` já vinda filtrada por `ativo` e ordenada pela
+ * ação (Task 5). Só o passo `menu` a usa: a máquina em si continua pura.
+ */
+export interface ItemDoMenu {
+  ordem: number;
+  rotulo: string;
+  tipo: "texto" | "consulta";
+  resposta_texto?: string | null;
+  /** `horarios_hoje` | `precos` | `link_agenda` — qualquer outra coisa cai no aviso. */
+  consulta?: string | null;
+}
+
 export interface SaidaDaMaquina {
   resposta: string | null;
   estado: Estado;
@@ -63,13 +78,13 @@ export interface SaidaDaMaquina {
   agendamento?: { event_type_id: string; starts_at: string };
 }
 
-const TEXTO_MENU = [
-  "Olá! Pra eu te ajudar mais rápido, responda com o número:",
+/** As 4 linhas do cardápio fixo (G4) — o piso quando não há `itens`. */
+const LINHAS_DO_MENU_G4 = [
   "1 — Horários de hoje",
   "2 — Preços dos serviços",
   "3 — Marcar horário",
   "0 — Falar com alguém",
-].join("\n");
+];
 
 const TEXTO_FALAR_COM_ALGUEM =
   "Certo! Sua mensagem já está com a nossa equipe — alguém te responde por aqui.";
@@ -82,6 +97,8 @@ const SEM_SERVICOS =
 const SEM_DIAS = "Não encontrei dias com vaga na agenda. Escolha outro serviço:";
 const SEM_HORARIOS = "Não encontrei horários livres nesse dia. Escolha outro dia:";
 const SEM_HORARIOS_HOJE = "Não encontrei horários livres para hoje.";
+const SEM_LINK_AGENDA =
+  "O link da agenda online ainda não está disponível — mande 0 para falar com a equipe.";
 
 /** Tetos da P5 — a lista longa vira mensagem longa, e mensagem longa cansa. */
 const MAX_DIAS = 5;
@@ -137,6 +154,48 @@ function comoNumero(texto: string): number | null {
   return /^\d+$/.test(texto) ? Number(texto) : null;
 }
 
+/**
+ * O contexto — o contrato da assinatura de `proximoPasso`, nomeado para os
+ * helpers usarem o mesmo tipo. `itens` é o acréscimo do ruling da Task 5:
+ * aditivo e opcional, e só o passo `menu` o enxerga (ausente = cardápio G4).
+ */
+interface ContextoDaMaquina {
+  servicos: ServicoDoMenu[];
+  diasComVaga: { data: string; rotulo: string }[];
+  horariosDoDia: string[];
+  linkAgenda?: string;
+  itens?: ItemDoMenu[];
+}
+
+/** O cardápio: os itens DO BANCO em ordem de `ordem`, ou o G4 fixo como piso. */
+function montarMenu(itens: readonly ItemDoMenu[] | undefined): string {
+  const ordenados = itens === undefined ? [] : [...itens].sort((a, b) => a.ordem - b.ordem);
+  const linhas =
+    ordenados.length > 0 ? ordenados.map((i) => `${i.ordem} — ${i.rotulo}`) : LINHAS_DO_MENU_G4;
+  return ["Olá! Pra eu te ajudar mais rápido, responda com o número:", ...linhas].join("\n");
+}
+
+function linhaDoLinkAgenda(contexto: { linkAgenda?: string }): string | null {
+  return contexto.linkAgenda != null && contexto.linkAgenda !== ""
+    ? `→ ou manda o link da agenda online: ${contexto.linkAgenda}`
+    : null;
+}
+
+/** As três consultas do cardápio — compartilhadas pelo G4 fixo e pelos itens. */
+function respostaDeHorariosDeHoje(contexto: ContextoDaMaquina): string {
+  return contexto.horariosDoDia.length === 0
+    ? SEM_HORARIOS_HOJE
+    : ["Horários de hoje:", ...contexto.horariosDoDia].join("\n");
+}
+
+function respostaDePrecos(contexto: ContextoDaMaquina): string {
+  return contexto.servicos.length === 0 ? SEM_SERVICOS : linhasDePrecos(contexto.servicos);
+}
+
+function respostaDeLinkAgenda(contexto: ContextoDaMaquina): string {
+  return linhaDoLinkAgenda(contexto) ?? SEM_LINK_AGENDA;
+}
+
 function linhaDeServico(s: ServicoDoMenu, i: number): string {
   return `${i + 1} — ${s.nome} · ${s.duracao_min} min${
     s.preco_cents === null ? "" : ` · ${formatarPreco(s.preco_cents)}`
@@ -148,9 +207,8 @@ function linhasDeServicos(contexto: { servicos: ServicoDoMenu[]; linkAgenda?: st
     "Ótimo! Me diz o serviço (corte, escova, coloração…)",
     ...contexto.servicos.map(linhaDeServico),
   ];
-  if (contexto.linkAgenda != null && contexto.linkAgenda !== "") {
-    cabecalho.push(`→ ou manda o link da agenda online: ${contexto.linkAgenda}`);
-  }
+  const link = linhaDoLinkAgenda(contexto);
+  if (link !== null) cabecalho.push(link);
   return cabecalho.join("\n");
 }
 
@@ -191,15 +249,7 @@ function repetePasso(
  * validado ANTES de virar escolha — é o que torna "repete o passo" a regra
  * em vez da exceção.
  */
-export function proximoPasso(
-  entrada: Entrada,
-  contexto: {
-    servicos: ServicoDoMenu[];
-    diasComVaga: { data: string; rotulo: string }[];
-    horariosDoDia: string[];
-    linkAgenda?: string;
-  },
-): SaidaDaMaquina {
+export function proximoPasso(entrada: Entrada, contexto: ContextoDaMaquina): SaidaDaMaquina {
   const texto = entrada.texto.trim();
 
   // Mídia sem texto: não responde, não avança, não reseta (G1 pondera com a
@@ -211,30 +261,16 @@ export function proximoPasso(
   // G1: de idle, qualquer texto não-vazio mostra o menu — inclusive "3" e "0"
   // vindos do nada: o cliente vê o cardápio antes de qualquer atalho.
   if (entrada.estado === "idle") {
-    return { resposta: TEXTO_MENU, estado: "menu", dados: entrada.dados };
+    return { resposta: montarMenu(contexto.itens), estado: "menu", dados: entrada.dados };
   }
 
   if (entrada.estado === "menu") {
     // As teclas da máquina têm precedência (decisão travada da Task 7): 3 e 0
-    // são respondidos AQUI, nunca por item de `menu_itens`.
+    // são respondidos AQUI, nunca por item de `menu_itens` — o cardápio que o
+    // dono monte não captura as teclas da máquina.
     const n = comoNumero(texto);
     if (n === 0) {
       return { resposta: TEXTO_FALAR_COM_ALGUEM, estado: "idle", dados: {} };
-    }
-    if (n === 1) {
-      const hoje = contexto.horariosDoDia;
-      return {
-        resposta: hoje.length === 0 ? SEM_HORARIOS_HOJE : ["Horários de hoje:", ...hoje].join("\n"),
-        estado: "menu",
-        dados: entrada.dados,
-      };
-    }
-    if (n === 2) {
-      return {
-        resposta: contexto.servicos.length === 0 ? SEM_SERVICOS : linhasDePrecos(contexto.servicos),
-        estado: "menu",
-        dados: entrada.dados,
-      };
     }
     if (n === 3) {
       if (contexto.servicos.length === 0) {
@@ -246,10 +282,55 @@ export function proximoPasso(
         dados: entrada.dados,
       };
     }
-    if (n === null) {
-      return repetePasso(DICA, TEXTO_MENU, "menu", entrada.dados);
+
+    const itens = contexto.itens;
+    const menu = montarMenu(itens);
+    if (itens !== undefined && itens.length > 0) {
+      // O cardápio do banco é a porta: cada número é a `ordem` de um item —
+      // e um número sem item é opção inválida (ruling da Task 5), não o G4.
+      if (n === null) {
+        return repetePasso(DICA, menu, "menu", entrada.dados);
+      }
+      const item = itens.find((i) => i.ordem === n);
+      if (item === undefined) {
+        return repetePasso(AVISO, menu, "menu", entrada.dados);
+      }
+      if (item.tipo === "texto") {
+        const resposta = typeof item.resposta_texto === "string" ? item.resposta_texto.trim() : "";
+        if (resposta === "") {
+          // Item cadastrado sem texto: aviso em vez de mensagem vazia.
+          return repetePasso(AVISO, menu, "menu", entrada.dados);
+        }
+        return { resposta, estado: "menu", dados: entrada.dados };
+      }
+      if (item.consulta === "horarios_hoje") {
+        return {
+          resposta: respostaDeHorariosDeHoje(contexto),
+          estado: "menu",
+          dados: entrada.dados,
+        };
+      }
+      if (item.consulta === "precos") {
+        return { resposta: respostaDePrecos(contexto), estado: "menu", dados: entrada.dados };
+      }
+      if (item.consulta === "link_agenda") {
+        return { resposta: respostaDeLinkAgenda(contexto), estado: "menu", dados: entrada.dados };
+      }
+      // `consulta` nula ou fora do vocabulário: item quebrado, aviso.
+      return repetePasso(AVISO, menu, "menu", entrada.dados);
     }
-    return repetePasso(AVISO, TEXTO_MENU, "menu", entrada.dados);
+
+    // Cardápio G4 (sem itens no banco): as consultas fixas de sempre.
+    if (n === 1) {
+      return { resposta: respostaDeHorariosDeHoje(contexto), estado: "menu", dados: entrada.dados };
+    }
+    if (n === 2) {
+      return { resposta: respostaDePrecos(contexto), estado: "menu", dados: entrada.dados };
+    }
+    if (n === null) {
+      return repetePasso(DICA, menu, "menu", entrada.dados);
+    }
+    return repetePasso(AVISO, menu, "menu", entrada.dados);
   }
 
   if (entrada.estado === "aguardando_servico") {
@@ -333,5 +414,5 @@ export function proximoPasso(
 
   // Estado fora do vocabulário (dado torto vindo do banco): G1 manda responder
   // com o menu em vez de calar.
-  return { resposta: TEXTO_MENU, estado: "menu", dados: entrada.dados };
+  return { resposta: montarMenu(contexto.itens), estado: "menu", dados: entrada.dados };
 }
