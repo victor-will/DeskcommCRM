@@ -206,3 +206,4 @@ caddy-sites/*
 
 # Curso ilustrado — fotos e site gerados (curso/capturar.ts, curso/montar.ts)
 curso/saida/
+.worktrees/
