@@ -41,10 +41,14 @@ type MenuSalvo = {
  * #144): o manager comum casaria 0 linhas no UPDATE de `organizations` pela
  * RLS, e o erro de papel real é o `requireRole` de cima.
  *
- * Ciclo de vida da regra (nunca duplicar): ligar CRIA ou REATIVA a linha de
- * `settings.menu.rule_id`; desligar marca `is_active=false` e mantém a linha;
- * religar reutiliza a mesma. `conditions: []` — medido na Task 5 Step 1a: o
- * superRefine do schema aceita lista vazia para `message.received`.
+ * Ciclo de vida da regra (nunca duplicar): ligar ADOTA uma regra órfã/legada
+ * de (org, gatilho, nome) — é ela que fecha os dois buracos de duplicação do
+ * review (INSERT órfão e corrida entre duas chamadas) —, ou CRIA, ou REATIVA a
+ * linha de `settings.menu.rule_id`; se a gravação de settings falhar depois de
+ * um INSERT novo, a recém-criada é DESATIVADA (compensação) e o erro volta.
+ * Desligar marca `is_active=false` e mantém a linha; religar reutiliza a mesma.
+ * `conditions: []` — medido na Task 5 Step 1a: o superRefine do schema aceita
+ * lista vazia para `message.received`.
  */
 export async function PATCH(req: NextRequest): Promise<Response> {
   const supportDenied = await requireSupportWrite();
@@ -93,8 +97,9 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       });
     }
 
-    // ── Ligar: cria a regra OU reativa a mesma (nunca duplica) ──────────────
+    // ── Ligar: adota, cria OU reativa — nunca duplica ───────────────────────
     let ruleId = typeof menuAtual.rule_id === "string" ? menuAtual.rule_id : null;
+    let criadaNestaChamada = false;
     if (ruleId !== null) {
       const { data: reativadas, error: erroReativar } = await admin
         .from("automation_rules")
@@ -105,25 +110,63 @@ export async function PATCH(req: NextRequest): Promise<Response> {
         .select("id");
       if (erroReativar)
         return fail("internal_error", "Falha ao religar o menu.", 500, { requestId });
-      if (!reativadas || reativadas.length === 0) ruleId = null; // a linha sumiu: cria outra
+      if (!reativadas || reativadas.length === 0) ruleId = null; // a linha sumiu: adota/cria
     }
     if (ruleId === null) {
-      const { data: criada, error: erroCriar } = await admin
+      // ── ADOÇÃO da regra órfã/legada por (org, gatilho, nome) — fix round 1 ──
+      // É ela que fecha os DOIS buracos de duplicação do review: (a) um
+      // INSERT anterior ficou ATIVO e a gravação de settings falhou (o retry
+      // não acha rule_id); (b) duas chamadas simultâneas leram sem rule_id.
+      // Sem adotar antes de inserir, cada retry/limiar inseriria uma SEGUNDA
+      // regra ativa e todo `message.received` rodaria o menu DUAS vezes — e
+      // `automation_rules` não tem constraint que impeça (só PK + índice
+      // parcial NÃO único, baseline.sql:5801-5819).
+      const { data: existentes, error: erroBusca } = await admin
         .from("automation_rules")
-        .insert({
-          organization_id: orgId,
-          name: NOME_DA_REGRA,
-          trigger_event: "message.received",
-          conditions: [],
-          actions: [{ type: "menu_responder", config: {} }],
-          is_active: true,
-        })
-        .select("id")
-        .single();
-      if (erroCriar || !criada) {
-        return fail("internal_error", "Falha ao criar a regra do menu.", 500, { requestId });
+        .select("id, is_active")
+        .eq("organization_id", orgId)
+        .eq("trigger_event", "message.received")
+        .eq("name", NOME_DA_REGRA)
+        .order("created_at", { ascending: true });
+      if (erroBusca) {
+        return fail("internal_error", "Falha ao procurar a regra do menu.", 500, { requestId });
       }
-      ruleId = String((criada as { id: unknown }).id);
+      const existente = existentes?.[0] ?? null;
+
+      if (existente !== null) {
+        ruleId = String((existente as { id: unknown }).id);
+        // Adotar é LIGAR: uma existente inativa (desligado que perdeu o
+        // rule_id) é ativada aqui, na mesma ida.
+        if ((existente as { is_active?: unknown }).is_active !== true) {
+          const { error: erroAtivar } = await admin
+            .from("automation_rules")
+            .update({ is_active: true })
+            .eq("id", ruleId)
+            .eq("organization_id", orgId)
+            .select("id");
+          if (erroAtivar) {
+            return fail("internal_error", "Falha ao religar o menu.", 500, { requestId });
+          }
+        }
+      } else {
+        const { data: criada, error: erroCriar } = await admin
+          .from("automation_rules")
+          .insert({
+            organization_id: orgId,
+            name: NOME_DA_REGRA,
+            trigger_event: "message.received",
+            conditions: [],
+            actions: [{ type: "menu_responder", config: {} }],
+            is_active: true,
+          })
+          .select("id")
+          .single();
+        if (erroCriar || !criada) {
+          return fail("internal_error", "Falha ao criar a regra do menu.", 500, { requestId });
+        }
+        ruleId = String((criada as { id: unknown }).id);
+        criadaNestaChamada = true;
+      }
     }
 
     const menuNovo: MenuSalvo = { ...menuAtual, enabled: true, rule_id: ruleId };
@@ -132,7 +175,23 @@ export async function PATCH(req: NextRequest): Promise<Response> {
       .from("organizations")
       .update({ settings: settingsMesclado })
       .eq("id", orgId);
-    if (erroGravacao) return fail("internal_error", "Falha ao salvar.", 500, { requestId });
+    if (erroGravacao) {
+      // ── COMPENSAÇÃO — fix round 1 ─────────────────────────────────────────
+      // A regra nasceu AGORA e a gravação de settings FALHOU: sem este passo o
+      // estado fica "regra ativa sem rule_id" — o retry (que não acha o id)
+      // inseriria OUTRA ativa e todo `message.received` rodaria o menu DUAS
+      // vezes. Desativa a recém-criada e devolve o erro: o estado consistente
+      // é "menu desligado". A compensação é best-effort (o erro principal já
+      // vai para o operador; a trilha está no run).
+      if (criadaNestaChamada && ruleId !== null) {
+        await admin
+          .from("automation_rules")
+          .update({ is_active: false })
+          .eq("id", ruleId)
+          .eq("organization_id", orgId);
+      }
+      return fail("internal_error", "Falha ao salvar.", 500, { requestId });
+    }
 
     void audit({
       action: "settings.menu_updated",

@@ -27,7 +27,7 @@ type Linha = Record<string, unknown>;
  */
 function montarMundo(
   stored: { settings: Record<string, unknown>; regras: Linha[] },
-  opts: { idDaRegra?: string } = { idDaRegra: "rule-novo" },
+  opts: { idDaRegra?: string; erroAoSalvar?: boolean } = { idDaRegra: "rule-novo" },
 ) {
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
@@ -62,6 +62,7 @@ function montarMundo(
         eqs.push([c, v]);
         return q;
       },
+      order: () => q,
       select: () => q,
       single: async () => {
         const id = proximoId++ === 0 ? (opts.idDaRegra ?? "rule-novo") : `rule-${proximoId}`;
@@ -85,6 +86,9 @@ function montarMundo(
           }),
           update: (patch: { settings: Record<string, unknown> }) => ({
             eq: async () => {
+              if (opts.erroAoSalvar === true) {
+                return { error: { message: "banco indisponível", code: "XX001" } };
+              }
               gravado = patch.settings;
               stored.settings = patch.settings;
               return { error: null };
@@ -227,5 +231,70 @@ describe("PATCH /api/v1/settings/menu — as três camadas decidem o `true`", ()
     expect(mundo.regras[0]?.id).toBe("rule-1");
     expect(mundo.regras[0]?.is_active).toBe(true);
     expect(mundo.gravado?.menu).toMatchObject({ enabled: true, rule_id: "rule-1" });
+  });
+
+  it("gravacao de settings falha depois do INSERT: erro E a regra recem-criada sai de cena (compensacao)", async () => {
+    const mundo = montarMundo(
+      { settings: { menu: { concedido: true } }, regras: [] },
+      { idDaRegra: "rule-9", erroAoSalvar: true },
+    );
+    const res = await mundo.PATCH({ enabled: true });
+    expect(res.status).toBe(500);
+    expect((res.body as { error: { code: string } }).error.code).toBe("internal_error");
+    expect(mundo.gravado).toBeNull();
+    // A COMPENSAÇÃO (fix round 1): a regra nasceu AGORA e a gravação falhou —
+    // sem desativá-la, o retry (que não acha rule_id) inseriria OUTRA ativa e
+    // todo message.received rodaria o menu DUAS vezes.
+    expect(mundo.regras).toHaveLength(1);
+    expect(mundo.regras[0]?.is_active).toBe(false);
+  });
+
+  it("regra orfa sem rule_id nas settings: ADOTADA — contagem de regras e de ativas segue 1", async () => {
+    // O estado que o caso de cima deixa quando o retry chega: regra ATIVA no
+    // banco, `settings.menu` sem `rule_id`. Sem adoção, o retry inseriria a
+    // segunda — é o buraco (a) do review.
+    const mundo = montarMundo({
+      settings: { menu: { concedido: true } },
+      regras: [
+        {
+          id: "rule-orfa",
+          organization_id: ORG_ID,
+          name: "Menu do WhatsApp",
+          trigger_event: "message.received",
+          is_active: true,
+        },
+      ],
+    });
+    const res = await mundo.PATCH({ enabled: true });
+    expect(res.status).toBe(200);
+    // ADOTOU em vez de inserir: total de regras da org continua 1…
+    expect(mundo.regras).toHaveLength(1);
+    expect(mundo.regras[0]?.id).toBe("rule-orfa");
+    // …o settings registra o id da EXISTENTE…
+    expect(mundo.gravado?.menu).toMatchObject({ enabled: true, rule_id: "rule-orfa" });
+    // …e as ATIVAS da org seguem 1 (nada de regra duplicada no motor).
+    expect(
+      mundo.regras.filter((r) => r.is_active === true && r.organization_id === ORG_ID),
+    ).toHaveLength(1);
+
+    // A variante INATIVA (desligado que perdeu o rule_id): adota E ativa —
+    // ligar é ligar, e a contagem continua 1.
+    const inativa = montarMundo({
+      settings: { menu: { concedido: true } },
+      regras: [
+        {
+          id: "rule-perdida",
+          organization_id: ORG_ID,
+          name: "Menu do WhatsApp",
+          trigger_event: "message.received",
+          is_active: false,
+        },
+      ],
+    });
+    const res2 = await inativa.PATCH({ enabled: true });
+    expect(res2.status).toBe(200);
+    expect(inativa.regras).toHaveLength(1);
+    expect(inativa.regras[0]?.is_active).toBe(true);
+    expect(inativa.gravado?.menu).toMatchObject({ rule_id: "rule-perdida" });
   });
 });
