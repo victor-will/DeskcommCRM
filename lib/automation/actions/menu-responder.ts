@@ -1,5 +1,6 @@
+import { marcarAgendamentoHandler } from "@/app/api/v1/agenda/agendamentos/_handler";
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
-import { diaLocalISO, partesNoFuso } from "@/lib/agenda/fuso";
+import { diaLocalISO, instanteDe, partesNoFuso } from "@/lib/agenda/fuso";
 import { horariosLivresDaOrg } from "@/lib/agenda/consulta";
 import { registerAction } from "@/lib/automation/actions";
 import { mensagemDeErro } from "@/lib/automation/actions/erro-legivel";
@@ -38,13 +39,21 @@ import { bloqueioHumano, iaResponderiaASessao } from "@/lib/menu/trava-da-ia";
  * 5. monta o contexto — serviços de `calendar_event_types`, e a DISPONIBILIDADE
  *    sempre pela `horariosLivresDaOrg` (B8: nunca reescrever a régua);
  * 6. `proximoPasso` → `resposta: null` → `skipped`;
+ * 6.5. **se o passo final devolveu `agendamento`**: a RESERVA roda ANTES de
+ *    qualquer texto sair — `marcarAgendamentoHandler`, a função que REST e MCP
+ *    já chamam (a régua de horário livre é dela, B8), com a hora de parede da
+ *    máquina CONVERTIDA para instante pelo fuso da jornada (`instanteDe`).
+ *    Reserva falhou → o cliente recebe "Não consegui marcar esse horário…",
+ *    NUNCA o "Agendado!";
  * 7. envio pelo MESMO caminho de `send-whatsapp.ts` (serviceForAutomation →
  *    espacarEnvio → `sendMessageHandler` com `actor {type:"webhook_source"}` e
  *    `requestId "rule:<id>"` → `reportarEnvio`) — sem reimplementar janela,
  *    pacing ou cap;
- * 8. **estado só avança em `success`** (Review Focus 3): qualquer recusa —
- *    exceção do handler (`janela_fechada`), mensagem `failed` ou `queued` —
- *    devolve o desfecho SEM gravar, e a máquina continua onde estava;
+ * 8. **estado avança com a régua combinada**: sem reserva, só em `success`
+ *    (Review Focus 3); com reserva FEITA, avança mesmo se o envio for
+ *    recusado (exceção pinada: a reserva é o fato que importa — não avançar
+ *    deixaria o cliente re-escolher o mesmo slot numa corrida contra a reserva
+ *    que já existe); com reserva FALHOU, nunca avança;
  * 9. sem `audit()`: o motor já registra `automation_rule_runs`.
  *
  * ─── A disponibilidade e a "uma chamada" do brief ───────────────────────────
@@ -54,8 +63,10 @@ import { bloqueioHumano, iaResponderiaASessao } from "@/lib/menu/trava-da-ia";
  * uma chamada: escolha da tecla em `aguardando_servico` (pré-leitura do número
  * — quem VALIDA e transiciona continua sendo a máquina), serviço já gravado em
  * `dados` nos passos `aguardando_dia`/`aguardando_horario`. A única exceção é
- * a consulta fixa "horários de hoje" no `menu`, onde não há serviço na mão: aí
- * é a união dos ativos, uma chamada POR serviço — a régua continua sendo a da
+ * a consulta `horários de hoje` no `menu`, resolvida PELA ORDEM DO ITEM (a
+ * mesma chave com que a máquina resolve a tecla — `menu_itens` pode ser
+ * renumerado; tecla 1 só no cardápio G4, sem itens): sem serviço na mão aí é
+ * a união dos ativos, uma chamada POR serviço — a régua continua sendo a da
  * própria função (B8), só que agregada. Consulta recusada/falha vira lista
  * vazia, e a máquina responde com os textos de vazio dela (G1 preservado).
  *
@@ -80,12 +91,18 @@ function comoNumero(texto: string): number | null {
  * Para QUAL serviço a disponibilidade é perguntada — a pré-leitura que torna
  * "uma chamada" possível num fluxo de passo único. Não decide nada: só escolhe
  * a régua a consultar; quem valida e transiciona é `proximoPasso`.
+ *
+ * No `menu` a tecla é resolvida COMO a máquina resolve — pela `ordem` do item
+ * em `itens` (renumerar `horarios_hoje` de 1 para 4 tem de continuar
+ * buscando), e só item de consulta `horarios_hoje` (ou a tecla 1 do G4, sem
+ * itens no banco) dispara a união.
  */
 function alvosDaDisponibilidade(
   servicos: readonly ServicoDoMenu[],
   estado: Estado,
   dados: Record<string, unknown>,
   corpo: string,
+  itens: readonly ItemDoMenu[] | undefined,
 ): string[] {
   const n = comoNumero(corpo);
   if (estado === "aguardando_horario" || estado === "aguardando_dia") {
@@ -97,9 +114,15 @@ function alvosDaDisponibilidade(
     if (n === null || n < 1 || n > servicos.length) return []; // tecla que a máquina vai recusar: nada a consultar
     return [servicos[n - 1]!.event_type_id];
   }
-  if (estado === "menu" && n === 1) {
-    // "Horários de hoje" sem serviço escolhido: união dos ativos.
-    return servicos.map((s) => s.event_type_id);
+  if (estado === "menu" && n !== null) {
+    const temItens = itens !== undefined && itens.length > 0;
+    if (temItens) {
+      const item = itens.find((i) => i.ordem === n);
+      const ehHorariosDeHoje = item?.tipo === "consulta" && item.consulta === "horarios_hoje";
+      return ehHorariosDeHoje ? servicos.map((s) => s.event_type_id) : [];
+    }
+    // Cardápio G4: a tecla fixa 1 é a de "Horários de hoje".
+    return n === 1 ? servicos.map((s) => s.event_type_id) : [];
   }
   return [];
 }
@@ -107,13 +130,15 @@ function alvosDaDisponibilidade(
 interface Disponibilidade {
   diasComVaga: Array<{ data: string; rotulo: string }>;
   horariosDoDia: string[];
+  /** O fuso da JORNADA que serviu os slots — é ele que converte a parede da máquina em instante na reserva. */
+  fuso: string | null;
 }
 
 /**
  * Dias com vaga (agrupados por dia LOCAL DA REGRA — `diaLocalISO` com o
  * `fusoDaRegra` que a própria consulta devolve) e os horários do dia que o
  * passo atual vai mostrar: o escolhido pela tecla em `aguardando_dia`, o de
- * `dados.dia` em `aguardando_horario`, e senão os de HOJE (a consulta fixa 1).
+ * `dados.dia` em `aguardando_horario`, e senão os de HOJE (a consulta 1).
  */
 async function montarDisponibilidade(
   admin: ActionCtx["admin"],
@@ -122,10 +147,11 @@ async function montarDisponibilidade(
   estado: Estado,
   dados: Record<string, unknown>,
   corpo: string,
+  itens: readonly ItemDoMenu[] | undefined,
   agora: Date,
 ): Promise<Disponibilidade> {
-  const alvos = alvosDaDisponibilidade(servicos, estado, dados, corpo);
-  if (alvos.length === 0) return { diasComVaga: [], horariosDoDia: [] };
+  const alvos = alvosDaDisponibilidade(servicos, estado, dados, corpo, itens);
+  if (alvos.length === 0) return { diasComVaga: [], horariosDoDia: [], fuso: null };
 
   const de = agora;
   const ate = new Date(agora.getTime() + JANELA_DIAS * 24 * 60 * 60 * 1000);
@@ -159,8 +185,40 @@ async function montarDisponibilidade(
   return {
     diasComVaga: dias.map((data) => ({ data, rotulo: formatarDia(data) })),
     horariosDoDia: horarios,
+    fuso,
   };
 }
+
+/**
+ * `"2026-11-07T09:30:00"` (hora de parede da máquina, SEM fuso — contrato da
+ * Task 3) → o INSTANTE no fuso da jornada que ofereceu o horário.
+ *
+ * `new Date(parede)` aqui leria o fuso do SERVIDOR e marcaria 3h do lado errado
+ * numa VPS em UTC — é o `instanteDe` de `lib/agenda/fuso.ts` (a mesma régua de
+ * parede→instante da rota e do MCP) que resolve, com as bordas de horário de
+ * verão tratadas. `null` quando não dá para converter com segurança (fuso
+ * ausente ou forma inesperada): nesse caso a reserva NÃO acontece e o cliente
+ * recebe a frase de falha — nunca "Agendado!".
+ */
+function paraInstante(parede: string, fuso: string | null): Date | null {
+  const p = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.exec(parede);
+  if (p === null || fuso === null) return null;
+  return instanteDe(
+    {
+      ano: Number(p[1]),
+      mes: Number(p[2]),
+      dia: Number(p[3]),
+      hora: Number(p[4]),
+      minuto: Number(p[5]),
+      segundo: Number(p[6]),
+    },
+    fuso,
+  );
+}
+
+/** A frase exata quando a casa recusa a reserva (ruling fix round 1). */
+const MSG_FALHA_RESERVA =
+  "Não consegui marcar esse horário — pode já estar ocupado. Escolha outro.";
 
 async function execute(
   ctx: ActionCtx,
@@ -270,17 +328,77 @@ async function execute(
     estado,
     dados,
     corpo,
+    itens,
     agora,
   );
 
   // ── 6. A máquina decide; resposta nula é pulo ─────────────────────────────
   const saida = proximoPasso(
     { estado, dados, texto: corpo },
-    { servicos, ...disponibilidade, itens },
+    {
+      servicos,
+      diasComVaga: disponibilidade.diasComVaga,
+      horariosDoDia: disponibilidade.horariosDoDia,
+      itens,
+    },
   );
   if (saida.resposta === null) return pulo("sem_resposta");
 
-  // ── 7+8. Enviar; estado só avança se o envio foi ACEITO ───────────────────
+  // ── 6.5. A RESERVA vem ANTES do "Agendado!" sair (spec §6.1 P5: gravar
+  // pela mesma régua — B8: a régua de horário livre é da casa, nunca
+  // reimplementada). A função é `marcarAgendamentoHandler`, a MESMA que rota e
+  // MCP chamam; ela revalida horário livre com a duração do tipo internamente.
+  // Entrada mínima: o que a máquina devolveu + org do contexto + contato do
+  // payload (ruling: nada de campo inventado).
+  let reservou = false;
+  let texto = saida.resposta;
+  if (saida.agendamento !== undefined) {
+    const instante = paraInstante(saida.agendamento.starts_at, disponibilidade.fuso);
+    if (instante === null) {
+      // Sem como converter com segurança não se marca nada — e nunca se
+      // promete "Agendado!" no escuro.
+      texto = MSG_FALHA_RESERVA;
+    } else {
+      try {
+        await marcarAgendamentoHandler(
+          ctx.admin,
+          {
+            organization_id: ctx.organizationId,
+            actor: { type: "webhook_source", id: ctx.ruleId },
+            requestId: `rule:${ctx.ruleId}`,
+          },
+          {
+            event_type_id: saida.agendamento.event_type_id,
+            starts_at: instante.toISOString(),
+            contact_id: contactId,
+          },
+        );
+        reservou = true;
+      } catch {
+        // Horário tomado entre a leitura e a escrita, tipo desativado, jornada
+        // mudou: a recusa da casa vira a frase do cliente, e o passo NÃO
+        // avança — ele escolhe outro horário.
+        texto = MSG_FALHA_RESERVA;
+      }
+    }
+  }
+
+  // ── 7+8. Enviar, e avançar o estado pela régua combinada ─────────────────
+  const salvar = async (): Promise<ActionResultDetail | null> => {
+    const { error } = await ctx.admin.from("menu_sessoes").upsert(
+      {
+        organization_id: ctx.organizationId,
+        contact_id: contactId,
+        estado: saida.estado,
+        dados: saida.dados,
+      },
+      { onConflict: "organization_id,contact_id" },
+    );
+    // A mensagem saiu e o estado não gravou: dizer sucesso esconderia uma
+    // máquina fora de sincronia (próxima mensagem reprocessaria o passo).
+    return error ? { type: TIPO, status: "failed", error: "menu_sessao_nao_gravada" } : null;
+  };
+
   try {
     const boundary = await serviceForAutomation(ctx, contactId, sessionId);
     await espacarEnvio(sessionId);
@@ -292,7 +410,7 @@ async function execute(
         actor: { type: "webhook_source", id: ctx.ruleId },
         requestId: `rule:${ctx.ruleId}`,
       },
-      { conversation_id: boundary.conversation_id, type: "text", body: saida.resposta ?? "" },
+      { conversation_id: boundary.conversation_id, type: "text", body: texto },
     );
     const desfecho = await reportarEnvio(
       ctx,
@@ -300,30 +418,36 @@ async function execute(
       message as unknown as MensagemEnviada,
       boundary.conversation_id,
     );
-    // Review Focus 3: `failed` (recusa do handler), `postponed` (fila) ou
-    // qualquer coisa que não seja `sent` → o passo NÃO avança. O cliente não
-    // viu a resposta, então a máquina continua de onde estava — a próxima
-    // mensagem reprocessa do mesmo estado, sem buraco e sem passo fantasma.
-    if (desfecho.status !== "success") return desfecho;
 
-    const { error: erroGravacao } = await ctx.admin.from("menu_sessoes").upsert(
-      {
-        organization_id: ctx.organizationId,
-        contact_id: contactId,
-        estado: saida.estado,
-        dados: saida.dados,
-      },
-      { onConflict: "organization_id,contact_id" },
-    );
-    if (erroGravacao) {
-      // A mensagem saiu e o estado não gravou: dizer sucesso esconderia uma
-      // máquina fora de sincronia (próxima mensagem reprocessaria o passo).
-      return { type: TIPO, status: "failed", error: "menu_sessao_nao_gravada" };
+    // A régua do passo 8, com as EXCEÇÕES pinadas no fix round 1:
+    //  - passo SEM reserva: só `success` avança — o cliente não viu a resposta,
+    //    então a máquina fica onde estava (Review Focus 3);
+    //  - reserva FEITA: avança MESMO com envio recusado — a reserva é o fato
+    //    que importa, e não avançar deixaria o cliente re-escolher o MESMO
+    //    slot numa corrida contra a reserva que já existe no banco;
+    //  - reserva FALHOU: nunca avança, mesmo que o texto de falha tenha saído.
+    const deveSalvar =
+      reservou || (desfecho.status === "success" && saida.agendamento === undefined);
+    if (deveSalvar) {
+      const falha = await salvar();
+      if (falha) return falha;
+    }
+    if (saida.agendamento !== undefined && !reservou) {
+      // O texto de falha pode ter sido entregue com sucesso — o run guarda a
+      // marca de que a RESERVA falhou, que é o fato que a aba Atividade lê.
+      return { ...desfecho, detail: { ...(desfecho.detail ?? {}), reserva: "falhou" } };
     }
     return desfecho;
   } catch (err) {
     // Recusa na frente (janela fechada, boundary, validação do handler): o
     // mesmo canal honesto de `send-whatsapp` — failed com a causa legível.
+    if (reservou) {
+      // EXCEÇÃO PINADA (fix round 1): reserva criada + envio recusado → o
+      // estado AVANÇA mesmo assim (a régua acima); sem isto o próximo "2" do
+      // cliente re-escolheria o slot que JÁ está marcado.
+      const falha = await salvar();
+      if (falha) return falha;
+    }
     return { type: TIPO, status: "failed", error: mensagemDeErro(err) };
   }
 }

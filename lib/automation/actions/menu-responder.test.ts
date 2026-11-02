@@ -31,6 +31,10 @@ const mocks = vi.hoisted(() => ({
   serviceForAutomation: vi.fn(async () => ({ conversation_id: "conv-1" })),
   espacarEnvio: vi.fn(async () => undefined),
   horariosLivresDaOrg: vi.fn(),
+  marcarAgendamentoHandler: vi.fn(async (): Promise<Record<string, unknown>> => ({
+    id: "ap-1",
+    status: "confirmed",
+  })),
 }));
 vi.mock("@/app/api/v1/messages/_handler", () => ({ sendMessageHandler: mocks.sendMessageHandler }));
 vi.mock("@/lib/atendimento/origem-automacao", () => ({
@@ -38,6 +42,11 @@ vi.mock("@/lib/atendimento/origem-automacao", () => ({
 }));
 vi.mock("@/lib/automation/throttle", () => ({ espacarEnvio: mocks.espacarEnvio }));
 vi.mock("@/lib/agenda/consulta", () => ({ horariosLivresDaOrg: mocks.horariosLivresDaOrg }));
+// A reserva é a função compartilhada da casa (REST + MCP chegam nela) — a rota
+// não muda; aqui só o chamador é dublado para fixar argumentos e recusas.
+vi.mock("@/app/api/v1/agenda/agendamentos/_handler", () => ({
+  marcarAgendamentoHandler: mocks.marcarAgendamentoHandler,
+}));
 
 import { getAction } from "@/lib/automation/actions";
 // Import isolado: registra a ação pelo mesmo caminho do register-all.
@@ -244,6 +253,7 @@ beforeEach(() => {
   mocks.sendMessageHandler.mockResolvedValue({ id: "msg-1", status: "sent" });
   mocks.serviceForAutomation.mockResolvedValue({ conversation_id: "conv-1" });
   mocks.espacarEnvio.mockResolvedValue(undefined);
+  mocks.marcarAgendamentoHandler.mockResolvedValue({ id: "ap-1", status: "confirmed" });
 });
 
 describe("menu_responder — registro e schema", () => {
@@ -482,5 +492,261 @@ describe("menu_responder — responde, grava e só avança com envio aceito", ()
     expect(chamada[2].body).toBe("Nosso cardápio: cortes e escovas, das 9h às 18h.");
     const linha = tabelas.menu_sessoes?.[0];
     expect(linha?.estado).toBe("menu");
+  });
+});
+
+/**
+ * Fix round 1 (review "Needs fixes"):
+ *
+ * 1. O `agendamento` do passo final É reservado — pela função compartilhada da
+ *    casa (`marcarAgendamentoHandler`, a mesma do REST e do MCP; B8: a régua
+ *    de horário livre é dela, nunca reimplementada), ANTES do "Agendado!" sair.
+ *    Reserva falhou → frase própria, passo não avança; reserva FEITA + envio
+ *    recusado → o estado AVANÇA (exceção pinada: a reserva é o fato que
+ *    importa, e não avançar deixaria o cliente re-escolher o mesmo slot).
+ *
+ * 2. A pré-leitura de disponibilidade resolve a tecla COMO a máquina resolve —
+ *    pela `ordem` do item, não pela tecla fixa 1 (renumerar `horarios_hoje`
+ *    para a ordem 4 tem de continuar buscando os horários; tecla 1 mapeada a
+ *    item de texto não tem de gastar consulta de agenda).
+ */
+describe("fix round 1 — reserva pela regua da casa e tecla resolvida por item", () => {
+  /** O passo final: serviço e dia já escolhidos e gravados na sessão. */
+  function sessaoNoPassoFinal(): Linha {
+    return sessao("aguardando_horario", {
+      servico_event_type_id: "et-corte",
+      servico_nome: "Corte",
+      dia: "2026-11-07",
+    });
+  }
+
+  /** Slots de 07/11/2026 (sábado) às 09:30 no fuso da régua — o horário escolhido. */
+  function comVagaEm07DeNovembro(): void {
+    mocks.horariosLivresDaOrg.mockResolvedValue({
+      ok: true,
+      slots: [
+        {
+          inicio: new Date("2026-11-07T12:30:00.000Z"),
+          fim: new Date("2026-11-07T13:00:00.000Z"),
+        },
+      ],
+      fusoDaRegra: "America/Sao_Paulo",
+      publicouHorarios: true,
+      fusoSuposto: false,
+      fontesDefasadas: [],
+      agendaExternaNuncaLida: false,
+      googleCoberturaParcial: false,
+    });
+  }
+
+  it("reserva final: cria pela regua da casa, envia o 'Agendado!' e avanca", async () => {
+    comVagaEm07DeNovembro();
+    const { admin, tabelas } = adminFake(mundo({ menu_sessoes: [sessaoNoPassoFinal()] }));
+    const r = await getAction("menu_responder")!.execute(
+      ctx(admin, payload({ body_preview: "1" })),
+      {},
+    );
+    expect(r.status).toBe("success");
+
+    expect(mocks.marcarAgendamentoHandler).toHaveBeenCalledTimes(1);
+    const [adminChamado, agendaCtx, entrada] = mocks.marcarAgendamentoHandler.mock
+      .calls[0] as unknown as [
+      unknown,
+      Record<string, unknown>,
+      { event_type_id: string; starts_at: string; contact_id: string },
+    ];
+    expect(adminChamado).toBe(admin);
+    // O mesmo formato da rota/MCP: org do contexto, actor da origem, requestId.
+    expect(agendaCtx).toEqual({
+      organization_id: ORG,
+      actor: { type: "webhook_source", id: "rule-1" },
+      requestId: "rule:rule-1",
+    });
+    // Hora de parede da máquina (09:30) CONVERTIDA para o instante do fuso da
+    // régua (America/Sao_Paulo = 12:30Z) — o contrato da Task 5 ("quem converte
+    // é a Task 5, com `instanteDe`") e a forma que rota e MCP exigem (offset).
+    expect(entrada).toEqual({
+      event_type_id: "et-corte",
+      starts_at: "2026-11-07T12:30:00.000Z",
+      contact_id: CONTATO,
+    });
+
+    const chamada = mocks.sendMessageHandler.mock.calls[0] as unknown as [
+      unknown,
+      unknown,
+      { body: string },
+    ];
+    expect(chamada[2].body).toContain("Agendado!");
+    expect(chamada[2].body).toContain("sáb 07/11");
+
+    expect(tabelas.menu_sessoes?.[0]?.estado).toBe("idle");
+    expect(tabelas.menu_sessoes?.[0]?.dados).toEqual({});
+  });
+
+  it("reserva recusada: frase da casa, nunca 'Agendado!', estado NAO avanca", async () => {
+    comVagaEm07DeNovembro();
+    mocks.marcarAgendamentoHandler.mockRejectedValue({
+      message: "Horário indisponível",
+      code: "agenda_horario_indisponivel",
+    });
+    const { admin, tabelas } = adminFake(mundo({ menu_sessoes: [sessaoNoPassoFinal()] }));
+    const r = await getAction("menu_responder")!.execute(
+      ctx(admin, payload({ body_preview: "1" })),
+      {},
+    );
+
+    expect(mocks.sendMessageHandler).toHaveBeenCalledTimes(1);
+    const chamada = mocks.sendMessageHandler.mock.calls[0] as unknown as [
+      unknown,
+      unknown,
+      { body: string },
+    ];
+    expect(chamada[2].body).toBe(
+      "Não consegui marcar esse horário — pode já estar ocupado. Escolha outro.",
+    );
+    expect(chamada[2].body).not.toContain("Agendado!");
+    // O TEXTO de falha foi entregue (desfecho do envio é sucesso) e o run carrega
+    // a marca da reserva — mas o passo fica onde estava: o cliente escolhe outro.
+    expect(r.status).toBe("success");
+    expect(r.detail?.reserva).toBe("falhou");
+    expect(tabelas.menu_sessoes?.[0]?.estado).toBe("aguardando_horario");
+    expect(tabelas.menu_sessoes?.[0]?.dados).toMatchObject({
+      servico_event_type_id: "et-corte",
+      dia: "2026-11-07",
+    });
+  });
+
+  it("reserva criada mas envio recusado: estado AVANCA mesmo assim (excecao pinada)", async () => {
+    comVagaEm07DeNovembro();
+    mocks.sendMessageHandler.mockRejectedValueOnce({
+      message: "Janela de 24 horas fechada.",
+      code: "janela_fechada",
+    });
+    const { admin, tabelas } = adminFake(mundo({ menu_sessoes: [sessaoNoPassoFinal()] }));
+    const r = await getAction("menu_responder")!.execute(
+      ctx(admin, payload({ body_preview: "1" })),
+      {},
+    );
+
+    expect(mocks.marcarAgendamentoHandler).toHaveBeenCalledTimes(1);
+    expect(r.status).toBe("failed");
+    // EXCEÇÃO PINADA (ruling): a reserva é o fato que importa. Não avançar
+    // deixaria o cliente re-escolher o MESMO slot numa corrida contra a
+    // reserva que já existe no banco.
+    expect(tabelas.menu_sessoes?.[0]?.estado).toBe("idle");
+    expect(tabelas.menu_sessoes?.[0]?.dados).toEqual({});
+  });
+
+  it("tecla do horarios_hoje resolvida por ITEM (ordem 4) busca a uniao — e no G4 tambem", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-07T12:00:00.000Z"));
+    try {
+      // Slots de HOJE (10:00Z, fuso UTC simplificado) — o que a consulta mostra.
+      mocks.horariosLivresDaOrg.mockResolvedValue({
+        ok: true,
+        slots: [
+          {
+            inicio: new Date("2026-11-07T10:00:00.000Z"),
+            fim: new Date("2026-11-07T10:30:00.000Z"),
+          },
+        ],
+        fusoDaRegra: "UTC",
+        publicouHorarios: true,
+        fusoSuposto: false,
+        fontesDefasadas: [],
+        agendaExternaNuncaLida: false,
+        googleCoberturaParcial: false,
+      });
+
+      // (a) A consulta mora na ordem 4 (o dono renumerou): a tecla 4 tem de
+      // buscar a união dos serviços — era o bug do `n === 1` fixo.
+      const renumerado = adminFake(
+        mundo({
+          menu_sessoes: [sessao("menu")],
+          menu_itens: [
+            {
+              organization_id: ORG,
+              ativo: true,
+              ordem: 4,
+              rotulo: "Horários de hoje",
+              tipo: "consulta",
+              consulta: "horarios_hoje",
+            },
+          ],
+        }),
+      );
+      const a = await getAction("menu_responder")!.execute(
+        ctx(renumerado.admin, payload({ body_preview: "4" })),
+        {},
+      );
+      expect(a.status).toBe("success");
+      // União = uma chamada POR serviço ativo (2 no fixture).
+      expect(mocks.horariosLivresDaOrg).toHaveBeenCalledTimes(2);
+      const chamada = mocks.sendMessageHandler.mock.calls[0] as unknown as [
+        unknown,
+        unknown,
+        { body: string },
+      ];
+      expect(chamada[2].body).toContain("10:00");
+      expect(chamada[2].body).not.toContain("Não encontrei horários livres para hoje");
+
+      // (b) Sem itens no banco, a tecla fixa 1 do G4 continua buscando (fallback).
+      vi.clearAllMocks();
+      mocks.horariosLivresDaOrg.mockResolvedValue({
+        ok: true,
+        slots: [
+          {
+            inicio: new Date("2026-11-07T10:00:00.000Z"),
+            fim: new Date("2026-11-07T10:30:00.000Z"),
+          },
+        ],
+        fusoDaRegra: "UTC",
+        publicouHorarios: true,
+        fusoSuposto: false,
+        fontesDefasadas: [],
+        agendaExternaNuncaLida: false,
+        googleCoberturaParcial: false,
+      });
+      const g4 = adminFake(mundo({ menu_sessoes: [sessao("menu")], menu_itens: [] }));
+      const b = await getAction("menu_responder")!.execute(
+        ctx(g4.admin, payload({ body_preview: "1" })),
+        {},
+      );
+      expect(b.status).toBe("success");
+      expect(mocks.horariosLivresDaOrg).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("tecla 1 mapeada a item de texto NAO busca a agenda", async () => {
+    const { admin } = adminFake(
+      mundo({
+        menu_sessoes: [sessao("menu")],
+        menu_itens: [
+          {
+            organization_id: ORG,
+            ativo: true,
+            ordem: 1,
+            rotulo: "Cardápio",
+            tipo: "texto",
+            resposta_texto: "Cortes e escovas, das 9h às 18h.",
+            consulta: null,
+          },
+        ],
+      }),
+    );
+    const r = await getAction("menu_responder")!.execute(
+      ctx(admin, payload({ body_preview: "1" })),
+      {},
+    );
+    expect(r.status).toBe("success");
+    expect(mocks.horariosLivresDaOrg).not.toHaveBeenCalled();
+    const chamada = mocks.sendMessageHandler.mock.calls[0] as unknown as [
+      unknown,
+      unknown,
+      { body: string },
+    ];
+    expect(chamada[2].body).toBe("Cortes e escovas, das 9h às 18h.");
   });
 });
