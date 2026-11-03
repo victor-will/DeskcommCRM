@@ -22,7 +22,11 @@ const h = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({
   redirect: vi.fn(),
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(h.aba),
+  // Query string REAL: `h.aba` guarda o VALOR do parâmetro e o mock monta a
+  // URL como o Next faria. (Montar `new URLSearchParams(h.aba)` direto com o
+  // valor solto parseava `sociais` como CHAVE e `get("aba")` devolvia null —
+  // o guard do deep-link nunca era exercitado, achado da revisão.)
+  useSearchParams: () => new URLSearchParams(`aba=${h.aba}`),
 }));
 vi.mock("@/hooks/i18n/useT", () => ({ useT: () => (chave: string) => chave }));
 vi.mock("@/lib/auth/server", () => ({
@@ -112,5 +116,20 @@ describe("descoberta das Redes sociais condicionada ao módulo", () => {
     // Header byte-idêntico ao de hoje: só a base, sem Instagram/Messenger.
     expect(screen.getByText(HEADER_BASE)).toBeInTheDocument();
     expect(screen.queryByText(/Instagram e seu Messenger/)).toBeNull();
+  });
+
+  it("flag ligada: ?aba=sociais abre a aba Redes sociais (deep-link vivo)", async () => {
+    // A outra metade do mesmo guard: com a flag LIGADA o deep-link funciona —
+    // a aba escolhida pela URL é a selecionada e o conteúdo dela monta.
+    h.moduloLigado.mockResolvedValue(true);
+    h.aba = "sociais";
+
+    render(await ConnectionsPage());
+
+    expect(screen.getByRole("tab", { name: "Redes sociais" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByTestId("child-sociais")).toBeInTheDocument();
   });
 });
