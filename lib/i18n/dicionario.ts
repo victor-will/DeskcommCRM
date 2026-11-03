@@ -14411,6 +14411,7 @@ export const DICIONARIO: Traducoes = {
   "Conecte suas contas e receba mensagens no atendimento.": { es: "Conecta tus cuentas y recibe mensajes en atención." },
   "A autorização não foi concluída. Tente conectar novamente e aceite as permissões necessárias.": { es: "La autorización no se completó. Intenta conectar de nuevo y acepta los permisos necesarios." },
   "Autorização concluída. Confira a conta na lista e ative o atendimento, quando disponível.": { es: "Autorización completada. Revisa la cuenta en la lista y activa la atención cuando esté disponible." },
+  "Autorização concluída! Agora ative o recebimento para que as mensagens cheguem ao atendimento.": { es: "¡Autorización completada! Ahora active la recepción para que los mensajes lleguen a la atención." },
   "Vincular o provedor": { es: "Vincular el proveedor" },
   "A chave fica cifrada no servidor e não é exibida novamente.": { es: "La clave se guarda cifrada en el servidor y no se vuelve a mostrar." },
   "Buscar perfis": { es: "Buscar perfiles" },
