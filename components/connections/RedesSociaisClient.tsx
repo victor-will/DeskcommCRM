@@ -48,6 +48,16 @@ function nomeInterno(account: Account): string | null {
   return rotulo && rotulo !== `${account.platform} · ${account.username}` ? rotulo : null;
 }
 
+/**
+ * O passo que FALTA depois da autorização: a conta aceita recebimento e ainda
+ * não tem canal ativo. É a MESMA condição do botão "Receber no atendimento" —
+ * extraída para que o DESTAQUE e a ação nunca discordem (gap 3: o copy já
+ * avisava, mas nada apontava para a ação).
+ */
+function recebimentoPendente(account: Account): boolean {
+  return account.inbox_supported && (!account.channel || account.channel.status !== "WORKING");
+}
+
 type Orphaned = {
   channel_id: string;
   account_id: string;
@@ -210,6 +220,13 @@ export function RedesSociaisClient() {
           )}
         </p>
       )}
+      {params.get("connected") && (
+        <p role="status" className="rounded-md border p-3 text-sm">
+          {t(
+            "Autorização concluída! Agora ative o recebimento para que as mensagens cheguem ao atendimento.",
+          )}
+        </p>
+      )}
       {(error || query.error) && (
         <p
           role="alert"
@@ -318,8 +335,21 @@ export function RedesSociaisClient() {
             </p>
           </Card>
           <div className="grid gap-4 xl:grid-cols-2">
-            {state.accounts.map((account) => (
-              <Card key={account.id} className="flex flex-col gap-3 p-4">
+            {state.accounts.map((account) => {
+              // O destaque (gap 3) vale com `connected=1` e SÓ enquanto o passo
+              // de recebimento está pendente — o mesmo predicado do botão: anel
+              // + pulso apontando para "Receber no atendimento". Sem o parâmetro,
+              // nada muda (byte-equal ao de antes).
+              const pendente = recebimentoPendente(account);
+              const destaque = Boolean(params.get("connected")) && pendente;
+              return (
+                <Card
+                  key={account.id}
+                  data-testid={destaque ? "conta-recem-conectada" : undefined}
+                  className={`flex flex-col gap-3 p-4${
+                    destaque ? " ring-2 ring-ring ring-offset-1 ring-offset-background animate-pulse" : ""
+                  }`}
+                >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -364,17 +394,16 @@ export function RedesSociaisClient() {
                       {canalDesativado(account.channel.metadata) ? t("Retomar") : t("Pausar")}
                     </Button>
                   )}
-                  {account.inbox_supported &&
-                    (!account.channel || account.channel.status !== "WORKING") && (
-                      <Button
-                        disabled={!!busy || !account.active}
-                        onClick={() =>
-                          void perform(account.id, { action: "inbox", account_id: account.id })
-                        }
-                      >
-                        {t("Receber no atendimento")}
-                      </Button>
-                    )}
+                  {pendente && (
+                    <Button
+                      disabled={!!busy || !account.active}
+                      onClick={() =>
+                        void perform(account.id, { action: "inbox", account_id: account.id })
+                      }
+                    >
+                      {t("Receber no atendimento")}
+                    </Button>
+                  )}
                   {account.channel && (
                     <Button asChild variant="outline">
                       <Link href="/app/inbox">{t("Abrir atendimento")}</Link>
@@ -435,8 +464,9 @@ export function RedesSociaisClient() {
                         )}
                   </p>
                 )}
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
           {state.accounts.length === 0 && (
             <p>{t("Nenhuma conta conectada neste perfil. Autorize uma rede para começar.")}</p>
