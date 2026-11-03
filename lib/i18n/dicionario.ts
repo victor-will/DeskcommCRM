@@ -14412,6 +14412,8 @@ export const DICIONARIO: Traducoes = {
   "A autorização não foi concluída. Tente conectar novamente e aceite as permissões necessárias.": { es: "La autorización no se completó. Intenta conectar de nuevo y acepta los permisos necesarios." },
   "Autorização concluída. Confira a conta na lista e ative o atendimento, quando disponível.": { es: "Autorización completada. Revisa la cuenta en la lista y activa la atención cuando esté disponible." },
   "Autorização concluída! Agora ative o recebimento para que as mensagens cheguem ao atendimento.": { es: "¡Autorización completada! Ahora active la recepción para que los mensajes lleguen a la atención." },
+  "Faltam permissões de mensagem nesta conta. Reconecte a conta e aceite todas as permissões solicitadas.": { es: "Faltan permisos de mensaje en esta cuenta. Reconecta la cuenta y acepta todos los permisos solicitados." },
+  "Esta conta está sem permissão para enviar mensagens. Reconecte para corrigir.": { es: "Esta cuenta está sin permiso para enviar mensajes. Reconecta para corregirlo." },
   "Vincular o provedor": { es: "Vincular el proveedor" },
   "A chave fica cifrada no servidor e não é exibida novamente.": { es: "La clave se guarda cifrada en el servidor y no se vuelve a mostrar." },
   "Buscar perfis": { es: "Buscar perfiles" },

@@ -58,6 +58,34 @@ function recebimentoPendente(account: Account): boolean {
   return account.inbox_supported && (!account.channel || account.channel.status !== "WORKING");
 }
 
+/**
+ * O diagnóstico de health traduzido em AÇÃO (gap 4): a rota já devolve
+ * `can_post` e `missing_permissions` (route.ts:203-204) — o que faltava era a
+ * tela dizer o que FAZER com eles.
+ *
+ * Ordem: os sinais mais ESPECÍFICOS primeiro. O brief não define conflito
+ * quando os dois aparecem, então `missing_permissions` vem antes (ruling: o
+ * default do controller) — a instrução dele (reconecte ACEITANDO as
+ * permissões) é a mais completa. Sem sinais novos, o de sempre: saudável
+ * afirma, sem saúde cai na frase genérica.
+ */
+function textoDeSaude(resposta: {
+  status?: unknown;
+  can_post?: unknown;
+  missing_permissions?: unknown;
+}): string {
+  const faltando = Array.isArray(resposta.missing_permissions)
+    ? resposta.missing_permissions.length
+    : 0;
+  if (faltando > 0) {
+    return "Faltam permissões de mensagem nesta conta. Reconecte a conta e aceite todas as permissões solicitadas.";
+  }
+  if (resposta.can_post === false) {
+    return "Esta conta está sem permissão para enviar mensagens. Reconecte para corrigir.";
+  }
+  return resposta.status === "healthy" ? "Conexão verificada" : "A conexão precisa de atenção";
+}
+
 type Orphaned = {
   channel_id: string;
   account_id: string;
@@ -160,13 +188,9 @@ export function RedesSociaisClient() {
       } else if (body.action === "authorize") {
         window.location.assign(result.data.auth_url as string);
       } else if (body.action === "health") {
-        setHealth((current) => ({
-          ...current,
-          [id]:
-            result.data.status === "healthy"
-              ? "Conexão verificada"
-              : "A conexão precisa de atenção",
-        }));
+        // O texto é GRAVADO cru e traduzido no render (`t(health[…])`, dinâmico):
+        // as frases novas têm de existir no dicionário para virarem español.
+        setHealth((current) => ({ ...current, [id]: textoDeSaude(result.data) }));
       } else if (body.action === "resync") {
         toast.success(
           t(

@@ -258,3 +258,78 @@ it("sem connected=1: sem banner", async () => {
   expect(screen.queryByText(/Autorização concluída/)).toBeNull();
   expect(screen.queryByTestId("conta-recem-conectada")).toBeNull();
 });
+
+// ── Diagnóstico de health acionável (gap 4) ─────────────────────────────────
+// A rota já devolve `can_post` e `missing_permissions` (route.ts:203-204); o
+// que faltava era a TELA traduzir os sinais em instrução — hoje toda resposta
+// virava a mesma frase genérica.
+
+const contaComCanalAtivo = {
+  configured: true,
+  label: "Partner",
+  networks: [{ id: "instagram", label: "Instagram" }],
+  accounts: [
+    {
+      id: "a",
+      platform: "instagram",
+      username: "brand",
+      active: true,
+      inbox_supported: true,
+      channel: { id: "c", status: "WORKING", display_name: null, metadata: {} },
+    },
+  ],
+};
+
+async function health(resposta: Record<string, unknown>): Promise<void> {
+  h.get.mockResolvedValue({ data: contaComCanalAtivo });
+  h.post.mockResolvedValue({ data: resposta });
+  mount();
+  await screen.findByText("brand");
+  fireEvent.click(await screen.findByRole("button", { name: "Verificar conexão" }));
+}
+
+it("health com permissões faltando: a instrução de reconectar (mesmo com can_post false)", async () => {
+  // Os DOIS sinais juntos: o mais específico (permissões faltando) vem primeiro
+  // — a ação indicada é reconectar ACEITANDO tudo, e não só "pode falhar".
+  await health({
+    status: "healthy",
+    can_post: false,
+    missing_permissions: ["send_message", "manage_messages"],
+  });
+  expect(
+    await screen.findByText(
+      "Faltam permissões de mensagem nesta conta. Reconecte a conta e aceite todas as permissões solicitadas.",
+    ),
+  ).toBeInTheDocument();
+  // A frase genérica e o diagnóstico de can_post NÃO aparecem — precedência.
+  expect(screen.queryByText("A conexão precisa de atenção")).toBeNull();
+  expect(
+    screen.queryByText("Esta conta está sem permissão para enviar mensagens. Reconecte para corrigir."),
+  ).toBeNull();
+});
+
+it("health com can_post false (sem permissões faltando): a instrução de reconectar por envio", async () => {
+  await health({ status: "healthy", can_post: false, missing_permissions: [] });
+  expect(
+    await screen.findByText(
+      "Esta conta está sem permissão para enviar mensagens. Reconecte para corrigir.",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("A conexão precisa de atenção")).toBeNull();
+});
+
+it("health saudável sem sinais novos: a frase de sempre — e sem reclamar do que não falta", async () => {
+  // Saudável (hoje: "Conexão verificada" — comportamento preservado, ADD-ONLY)…
+  await health({ status: "healthy", can_post: true, missing_permissions: [] });
+  expect(await screen.findByText("Conexão verificada")).toBeInTheDocument();
+  expect(
+    screen.queryByText(/Faltam permissões|sem permissão para enviar mensagens/),
+  ).toBeNull();
+
+  // …e a SEM sinais e SEM saúde: a frase genérica atual, intacta.
+  await health({ status: "unhealthy", can_post: null, missing_permissions: [] });
+  expect(await screen.findByText("A conexão precisa de atenção")).toBeInTheDocument();
+  expect(
+    screen.queryByText(/Faltam permissões|sem permissão para enviar mensagens/),
+  ).toBeNull();
+});
