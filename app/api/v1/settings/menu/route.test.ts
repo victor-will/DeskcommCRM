@@ -21,14 +21,15 @@ type Linha = Record<string, unknown>;
 
 /**
  * O mundo da rota: `organizations` (leitura+escrita de `settings`, molde de
- * `settings/proposals/route.test.ts`) e `automation_rules` (insert com
- * `select().single()` no fim, update com `eq().eq().select()`) — o recorte que
- * o ciclo de vida da regra usa.
+ * `settings/proposals/route.test.ts`), `automation_rules` (insert com
+ * `select().single()` no fim, update com `eq().eq().select()`) e `menu_itens`
+ * (o seed do ligar — achado da revisão: o G4 precisa nascer no primeiro ligar).
  */
 function montarMundo(
-  stored: { settings: Record<string, unknown>; regras: Linha[] },
+  stored: { settings: Record<string, unknown>; regras: Linha[]; itens?: Linha[] },
   opts: { idDaRegra?: string; erroAoSalvar?: boolean } = { idDaRegra: "rule-novo" },
 ) {
+  const itens: Linha[] = [...(stored.itens ?? [])];
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
     user: { id: USER_ID, idioma: "pt-BR" },
@@ -97,6 +98,45 @@ function montarMundo(
         };
       }
       if (tabela === "automation_rules") return regrasBuilder();
+      if (tabela === "menu_itens") {
+        // select().eq() → lista (a contagem do seed); insert().select() → linhas.
+        let inserindo: Linha[] | null = null;
+        const eqs: Array<[string, unknown]> = [];
+        const q = {
+          select: () => q,
+          eq: (c: string, v: unknown) => {
+            eqs.push([c, v]);
+            return q;
+          },
+          insert: (linhas: Linha | Linha[]) => {
+            inserindo = Array.isArray(linhas) ? linhas : [linhas];
+            return q;
+          },
+          then: (
+            ok: (r: { data: Linha[]; error: null }) => unknown,
+            ra?: (e: unknown) => unknown,
+          ) => {
+            if (inserindo !== null) {
+              const novos = inserindo.map((r, i) => ({
+                id: `id-semeado-${i + 1}`,
+                ativo: true,
+                ...r,
+              }));
+              itens.push(...novos);
+              return Promise.resolve({ data: novos.map((n) => ({ ...n })), error: null }).then(
+                ok,
+                ra,
+              );
+            }
+            const alvos = itens.filter((l) => eqs.every(([c, v]) => l[c] === v));
+            return Promise.resolve({ data: alvos.map((a) => ({ ...a })), error: null }).then(
+              ok,
+              ra,
+            );
+          },
+        };
+        return q;
+      }
       throw new Error(`tabela não mockada: ${tabela}`);
     },
   };
@@ -108,6 +148,9 @@ function montarMundo(
     },
     get regras() {
       return stored.regras;
+    },
+    get itens() {
+      return itens;
     },
     async PATCH(corpo: unknown) {
       const { PATCH } = await import("./route");
@@ -296,5 +339,30 @@ describe("PATCH /api/v1/settings/menu — as três camadas decidem o `true`", ()
     expect(inativa.regras).toHaveLength(1);
     expect(inativa.regras[0]?.is_active).toBe(true);
     expect(inativa.gravado?.menu).toMatchObject({ rule_id: "rule-perdida" });
+  });
+
+  it("ligar semeia os 4 defaults do G4 numa org vazia — e a 2ª vez nao duplica", async () => {
+    // O achado da revisão: o POST /seed não tinha chamador de produção — os 4
+    // defaults do G4 nunca nasciam. O seed agora roda no caminho de SUCESSO do
+    // ligar (best-effort), idempotente pela mesma régua do /seed.
+    const mundo = montarMundo({ settings: { menu: { concedido: true } }, regras: [], itens: [] });
+    const primeira = await mundo.PATCH({ enabled: true });
+    expect(primeira.status).toBe(200);
+    expect(mundo.itens, "o primeiro ligar deveria criar os 4 defaults").toHaveLength(4);
+    // O texto byte a byte do G4 (pinado também pelo teste do /seed).
+    expect(mundo.itens[0]).toMatchObject({
+      ordem: 1,
+      rotulo: "Horários de hoje",
+      tipo: "consulta",
+      consulta: "horarios_hoje",
+      organization_id: ORG_ID,
+      ativo: true,
+    });
+    expect(mundo.itens.map((i) => i.ordem)).toEqual([1, 2, 3, 0]);
+
+    // Idempotente: um SEGUNDO ligar (re-ligar) não duplica nada.
+    const segunda = await mundo.PATCH({ enabled: true });
+    expect(segunda.status).toBe(200);
+    expect(mundo.itens, "o segundo ligar não pode duplicar os defaults").toHaveLength(4);
   });
 });

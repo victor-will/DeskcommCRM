@@ -7,7 +7,9 @@ import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { requireSupportWrite } from "@/lib/impersonate/support";
 import { moduloLigado } from "@/lib/instalacao/modulos";
+import { logger } from "@/lib/logger";
 import { planoIncluiRecurso } from "@/lib/menu/recursos";
+import { semearMenuSeVazio } from "@/lib/menu/seed";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -191,6 +193,21 @@ export async function PATCH(req: NextRequest): Promise<Response> {
           .eq("organization_id", orgId);
       }
       return fail("internal_error", "Falha ao salvar.", 500, { requestId });
+    }
+
+    // ── Seed dos 4 defaults do G4 — melhor esforço, FAIL-OPEN (ruling) ──────
+    // O POST /seed não tinha chamador de produção: a org nova ficava sem o
+    // cardápio até alguém chamar a rota à mão. O primeiro LIGAR semeia (a
+    // mesma régua idempotente de `lib/menu/seed.ts`). Se o insert falhar, o
+    // toggle NÃO falha: sem itens a máquina responde pelo cardápio fixo G4 e a
+    // tela mostra a lista vazia — o `logger.warn` deixa o rastro para quem
+    // investigar.
+    const seed = await semearMenuSeVazio(admin, orgId);
+    if (seed.erro !== null) {
+      logger.warn("menu: seed dos defaults do G4 nao gravou (fail-open)", {
+        organization_id: orgId,
+        erro: seed.erro,
+      });
     }
 
     void audit({

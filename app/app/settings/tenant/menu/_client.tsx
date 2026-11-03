@@ -53,6 +53,25 @@ const CONSULTAS = [
 
 const porOrdem = (a: ItemDaApi, b: ItemDaApi) => a.ordem - b.ordem;
 
+/**
+ * Teclas com precedência na MÁQUINA (`lib/menu/maquina.ts`: `3` e `0` são
+ * respondidos pela máquina antes de qualquer item de `menu_itens` — decisão
+ * travada na Task 7). Um item criado com uma destas ordens ficaria INVISÍVEL:
+ * o cliente digita 3/0 e a máquina responde, o item nunca é alcançado.
+ */
+export const TECLAS_RESERVADAS: readonly number[] = [0, 3];
+
+/**
+ * Próxima ordem livre para um item NOVO: `máximo + 1` (a régua de sempre,
+ * monotônica) pulando as teclas reservadas da máquina. Pura de propósito —
+ * testada direto em `page.test.tsx`.
+ */
+export function proximaOrdemLivre(itens: ReadonlyArray<{ ordem: number }>): number {
+  let candidato = itens.reduce((max, i) => Math.max(max, i.ordem), -1) + 1;
+  while (TECLAS_RESERVADAS.includes(candidato)) candidato += 1;
+  return candidato;
+}
+
 export function MenuConfigClient(props: Props) {
   const t = useT();
   const router = useRouter();
@@ -101,7 +120,9 @@ export function MenuConfigClient(props: Props) {
   }
 
   function abrirNovo() {
-    const proxima = itens.reduce((max, i) => Math.max(max, i.ordem), -1) + 1;
+    // Lista vazia SEM seed dava ordem 0 — tecla da máquina (achado da
+    // revisão): `proximaOrdemLivre` pula {0, 3}.
+    const proxima = proximaOrdemLivre(itens);
     setErroForm(null);
     setRascunho({
       id: null,

@@ -159,11 +159,17 @@ function adminFake(
   };
 }
 
-/** O mundo em que o menu funciona: settings ligado, contato limpo, 2 serviços. */
+/** O mundo em que o menu funciona: settings ligado+concedido, contato limpo, 2 serviços. */
 function mundo(overrides: Record<string, Linha[]> = {}): Record<string, Linha[]> {
   return {
     organizations: [
-      { id: ORG, settings: { menu: { enabled: true }, agenda_online: { enabled: false } } },
+      {
+        id: ORG,
+        settings: {
+          menu: { enabled: true, concedido: true },
+          agenda_online: { enabled: false },
+        },
+      },
     ],
     contacts: [
       {
@@ -226,7 +232,18 @@ function ctx(admin: ActionCtx["admin"], corpo: Record<string, unknown> = payload
     ruleId: "rule-1",
     ruleName: "Menu do WhatsApp",
     event: { event_type: "message.received", payload: corpo } as unknown as ActionCtx["event"],
-    context: {},
+    // O contato HIDRATADO pelo `buildContext` do motor (engine.ts — select * no
+    // contato do evento): é daqui que as guardas COMPARTILHADAS leem
+    // (`checarGuardasDeContato`), como nas irmãs. Fixture limpa: existe,
+    // telefone, não bloqueado, consentimento não recusado.
+    context: {
+      contact: {
+        id: CONTATO,
+        phone_number: "5511999999999",
+        is_blocked: false,
+        consent: { marketing: { granted_at: "2026-09-01T00:00:00Z", declined_at: null } },
+      },
+    },
     requestId: "req-1",
   };
 }
@@ -280,6 +297,50 @@ describe("menu_responder — as travas antes de qualquer resposta", () => {
     expect(consultadas.has("menu_sessoes")).toBe(false);
     expect(mocks.sendMessageHandler).not.toHaveBeenCalled();
     expect(mocks.horariosLivresDaOrg).not.toHaveBeenCalled();
+  });
+
+  it("concessao revogada com o menu ainda ligado: skipped, sessao intocada", async () => {
+    // O achado da revisão: a rota admin revoga (`concedido:false`) sem tocar em
+    // `enabled` — se o passo 1 só olha `enabled`, o menu respondia DEPOIS da
+    // revogação, com a tela dizendo "Aguardando ativação".
+    const { admin, consultadas } = adminFake(
+      mundo({
+        organizations: [{ id: ORG, settings: { menu: { enabled: true, concedido: false } } }],
+      }),
+    );
+    const r = await getAction("menu_responder")!.execute(ctx(admin), {});
+    expect(r.status).toBe("skipped");
+    expect(r.detail?.reason).toBe("sem_concessao");
+    // Nem a sessão é lida: a trava cai antes do passo 4.
+    expect(consultadas.has("menu_sessoes")).toBe(false);
+    expect(mocks.sendMessageHandler).not.toHaveBeenCalled();
+    expect(mocks.horariosLivresDaOrg).not.toHaveBeenCalled();
+  });
+
+  it("consentimento recusado: skipped pela guarda compartilhada — sem envio e sem avanco de estado", async () => {
+    // Invariante de conformidade das irmãs (lib/automation/guarda-do-contato.ts):
+    // "quem disse não me mande mensagem, não" — o menu é via de mensagem como
+    // send-whatsapp/send-ai-message e anda pela MESMA guarda.
+    const { admin, tabelas, consultadas } = adminFake(mundo({ menu_sessoes: [sessao("menu")] }));
+    const c = ctx(admin);
+    c.context = {
+      contact: {
+        id: CONTATO,
+        phone_number: "5511999999999",
+        is_blocked: false,
+        consent: {
+          marketing: { granted_at: "2026-09-01T00:00:00Z", declined_at: "2026-10-01T00:00:00Z" },
+        },
+      },
+    };
+    const r = await getAction("menu_responder")!.execute(c, {});
+    expect(r.status).toBe("skipped");
+    expect(r.detail?.reason).toBe("consent_declined");
+    expect(mocks.sendMessageHandler).not.toHaveBeenCalled();
+    // A trava é ANTES do passo 4: a sessão não é nem lida, e a que existia
+    // continua exatamente onde estava (estado não avança).
+    expect(consultadas.has("menu_sessoes")).toBe(false);
+    expect(tabelas.menu_sessoes?.[0]?.estado).toBe("menu");
   });
 
   it("bloqueio humano: skipped", async () => {
@@ -553,7 +614,7 @@ describe("fix round 1 — reserva pela regua da casa e tecla resolvida por item"
       .calls[0] as unknown as [
       unknown,
       Record<string, unknown>,
-      { event_type_id: string; starts_at: string; contact_id: string },
+      { event_type_id: string; starts_at: string; contact_id: string; conversation_id?: string },
     ];
     expect(adminChamado).toBe(admin);
     // O mesmo formato da rota/MCP: org do contexto, actor da origem, requestId.
@@ -565,10 +626,13 @@ describe("fix round 1 — reserva pela regua da casa e tecla resolvida por item"
     // Hora de parede da máquina (09:30) CONVERTIDA para o instante do fuso da
     // régua (America/Sao_Paulo = 12:30Z) — o contrato da Task 5 ("quem converte
     // é a Task 5, com `instanteDe`") e a forma que rota e MCP exigem (offset).
+    // `conversation_id` liga o agendamento à conversa — a MESMA passagem que a
+    // rota REST já fazia (route.ts:115); sem ela o booking nascia órfão.
     expect(entrada).toEqual({
       event_type_id: "et-corte",
       starts_at: "2026-11-07T12:30:00.000Z",
       contact_id: CONTATO,
+      conversation_id: CONVERSA,
     });
 
     const chamada = mocks.sendMessageHandler.mock.calls[0] as unknown as [

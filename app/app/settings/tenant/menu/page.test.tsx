@@ -187,3 +187,41 @@ describe("Página de configuração do menu — os três estados do plano", () =
     expect(linhas[1]).toHaveTextContent("Preços dos serviços");
   });
 });
+
+describe("abrirNovo nunca escolhe tecla reservada da máquina", () => {
+  // Achado da revisão: com lista vazia o `max+1` dava 0 — tecla 0 é DA
+  // MÁQUINA ("Falar com alguém", precedência pinada em lib/menu/maquina.ts):
+  // o primeiro item do locatário nascia invisível sob a tecla da máquina.
+  it("lista vazia começa em 1 (0 é reservada)", async () => {
+    const { proximaOrdemLivre } = await import("./_client");
+    expect(proximaOrdemLivre([])).toBe(1);
+  });
+
+  it("pula 3 quando max+1 cair nela, e nunca devolve 0 nem 3", async () => {
+    const { proximaOrdemLivre, TECLAS_RESERVADAS } = await import("./_client");
+    expect(TECLAS_RESERVADAS).toEqual(expect.arrayContaining([0, 3]));
+    expect(proximaOrdemLivre([{ ordem: 1 }])).toBe(2);
+    expect(proximaOrdemLivre([{ ordem: 1 }, { ordem: 2 }])).toBe(4); // 3 reservada
+    expect(proximaOrdemLivre([{ ordem: 3 }])).toBe(4);
+    expect(proximaOrdemLivre([{ ordem: 0 }])).toBe(1);
+    expect(proximaOrdemLivre([{ ordem: 0 }, { ordem: 3 }])).toBe(4);
+    expect(proximaOrdemLivre([{ ordem: 4 }])).toBe(5);
+
+    // Propriedade: para qualquer lista, a escolha nunca é uma tecla da máquina.
+    const listas: Array<Array<{ ordem: number }>> = [
+      [],
+      [{ ordem: 0 }],
+      [{ ordem: 1 }],
+      [{ ordem: 1 }, { ordem: 2 }],
+      [{ ordem: 3 }],
+      [{ ordem: 0 }, { ordem: 1 }, { ordem: 2 }, { ordem: 3 }],
+      [{ ordem: 7 }],
+    ];
+    for (const lista of listas) {
+      const escolhida = proximaOrdemLivre(lista);
+      expect(TECLAS_RESERVADAS, `lista ${JSON.stringify(lista)} → ${escolhida}`).not.toContain(
+        escolhida,
+      );
+    }
+  });
+});

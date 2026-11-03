@@ -5,6 +5,7 @@ import { horariosLivresDaOrg } from "@/lib/agenda/consulta";
 import { registerAction } from "@/lib/automation/actions";
 import { mensagemDeErro } from "@/lib/automation/actions/erro-legivel";
 import { reportarEnvio, type MensagemEnviada } from "@/lib/automation/desfecho-do-envio";
+import { checarGuardasDeContato } from "@/lib/automation/guarda-do-contato";
 import { espacarEnvio } from "@/lib/automation/throttle";
 import type { ActionCtx, ActionResultDetail } from "@/lib/automation/types";
 import { serviceForAutomation } from "@/lib/atendimento/origem-automacao";
@@ -25,7 +26,10 @@ import { bloqueioHumano, iaResponderiaASessao } from "@/lib/menu/trava-da-ia";
  *
  * 0. corpo vazio (só mídia), sem contato ou sem sessão → `skipped` sem tocar
  *    em banco nenhum (ruling: `body_preview` vazio é mídia, não menu);
- * 1. `organizations.settings.menu.enabled !== true` → `skipped`;
+ * 1. `organizations.settings.menu.enabled !== true` → `skipped`; o MESMO com
+ *    `concedido !== true` (`sem_concessao` — revogar mata o menu) e com as
+ *    guardas compartilhadas do contato (`checarGuardasDeContato`, inclusive
+ *    `consent_declined`) → `skipped`;
  * 2. `bloqueioHumano` (silêncio do humano, atribuição a pessoa, flags do
  *    contato) → `skipped` — a LEITURA do contato é daqui e distinguir ERRO de
  *    "sem linha" é ruling: erro → `skipped` (nunca `null` pós-erro), linha
@@ -243,10 +247,25 @@ async function execute(
     .maybeSingle();
   if (erroOrg) return pulo("settings_indisponivel");
   const settings = (org?.settings ?? {}) as {
-    menu?: { enabled?: boolean };
+    menu?: { enabled?: boolean; concedido?: boolean };
     agenda_online?: { enabled?: boolean };
   };
   if (settings.menu?.enabled !== true) return pulo("menu_desligado");
+  // ── Revogação mata o menu (achado da revisão) ─────────────────────────────
+  // `enabled` sozinho não basta: a rota admin revoga escrevendo só
+  // `concedido:false` (e a camada de plano pode sumir dos `recursos` sem
+  // tocar no toggle). Sem esta trava, o menu continuava respondendo com a
+  // tela já dizendo "Aguardando ativação".
+  if (settings.menu?.concedido !== true) return pulo("sem_concessao");
+
+  // ── Guardas COMPARTILHADAS (irmã de send-whatsapp) ───────────────────────
+  // Mesmas 4 de `lib/automation/guarda-do-contato.ts` — inclusive o
+  // consentimento (`consent_declined`: "quem disse não me mande mensagem,
+  // não"), invariante de conformidade em código e não em config. Barata (lê
+  // `ctx.context.contact`, hidratado pelo buildContext) e ANTES de qualquer
+  // leitura/avanço de sessão: se bloqueia, é pulo — a máquina não anda.
+  const guarda = checarGuardasDeContato(ctx);
+  if (!guarda.ok) return pulo(guarda.reason);
 
   // ── 2. O contato (lido AQUI — ruling: erro ≠ sem linha) e as travas ───────
   const { data: contatoRow, error: erroContato } = await ctx.admin
@@ -371,6 +390,11 @@ async function execute(
             event_type_id: saida.agendamento.event_type_id,
             starts_at: instante.toISOString(),
             contact_id: contactId,
+            // O MESMO campo que a rota REST passa (agendamentos/route.ts:115):
+            // sem ele o agendamento nascia órfão da conversa — o boundary do
+            // booking e o `fecharOLaco` leem `input.conversation_id`. O tipo é
+            // `conversation_id?: string` (sem null) — ausente vira `undefined`.
+            conversation_id: conversationId ?? undefined,
           },
         );
         reservou = true;

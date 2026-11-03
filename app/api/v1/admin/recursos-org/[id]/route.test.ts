@@ -20,20 +20,54 @@ vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 
+type Linha = Record<string, unknown>;
+
 /**
  * A camada (b): quem ADMINISTRA A INSTÂNCIA concede o recurso à organização —
  * `settings.<recurso>.concedido` com merge RASO (molde de
  * `settings/proposals/route.ts`: o resto do `settings` sobrevive).
+ *
+ * `regras` entra para a REVOGAÇÃO (achado da revisão final): quando
+ * `concedido:false` é escrito, a rota desliga `enabled` E apaga a regra de
+ * `rule_id` — a contagem precisa ficar visível daqui.
  */
-function montarMundo(stored: Record<string, unknown>) {
+function montarMundo(stored: Record<string, unknown>, opts: { regras?: Linha[] } = {}) {
   vi.mocked(requirePlatformAdminEscrita).mockResolvedValue({
     user: { id: USER_ID },
     platformAdmin: { user_id: USER_ID, scope: "full", mfa_required: true },
   } as never);
 
+  const regras: Linha[] = [...(opts.regras ?? [])];
   let gravado: Record<string, unknown> | null = null;
   const client = {
     from: (tabela: string) => {
+      if (tabela === "automation_rules") {
+        // Cadeia da rota: `.update(patch).eq(id).eq(org).select()`.
+        return {
+          update: (patch: Linha) => {
+            const eqs: Array<[string, unknown]> = [];
+            const q = {
+              eq: (c: string, v: unknown) => {
+                eqs.push([c, v]);
+                return q;
+              },
+              select: () => q,
+              then: (
+                ok: (r: { data: Linha[]; error: null }) => unknown,
+                ra?: (e: unknown) => unknown,
+              ) => {
+                const alvos = regras.filter((l) => eqs.every(([c, v]) => l[c] === v));
+                for (const alvo of alvos) Object.assign(alvo, patch);
+                return Promise.resolve({
+                  data: alvos.map((a) => ({ id: a.id })),
+                  error: null,
+                }).then(ok, ra);
+              },
+            };
+            return q;
+          },
+        };
+      }
       if (tabela !== "organizations") throw new Error(`tabela não mockada: ${tabela}`);
       return {
         select: () => ({
@@ -56,6 +90,7 @@ function montarMundo(stored: Record<string, unknown>) {
     get gravado() {
       return gravado;
     },
+    regras,
     async PATCH(corpo: unknown) {
       const { PATCH } = await import("./route");
       const res = await PATCH(
@@ -104,7 +139,9 @@ describe("PATCH /api/v1/admin/recursos-org/[id] — a camada (b): concessão da 
     const mundo = montarMundo({ menu: { concedido: true } });
     const res = await mundo.PATCH({ recurso: "agenda_online", concedido: false });
     expect(res.status).toBe(200);
-    expect(mundo.gravado?.agenda_online).toEqual({ concedido: false });
+    // A revogação carrega a demote junto (ruling da revisão): `enabled:false`
+    // no MESMO merge — e o bloco do MENU, de outra chave, fica intocado.
+    expect(mundo.gravado?.agenda_online).toEqual({ concedido: false, enabled: false });
     expect(mundo.gravado?.menu).toEqual({ concedido: true });
   });
 
@@ -126,6 +163,48 @@ describe("PATCH /api/v1/admin/recursos-org/[id] — a camada (b): concessão da 
     expect(res.status).toBe(403);
     expect((res.body as { error: { code: string } }).error.code).toBe("forbidden_scope");
     expect(mundo.gravado).toBeNull();
+  });
+
+  it("REVOGAR concede:false desliga enabled E apaga a regra (contagem segue 1)", async () => {
+    // O achado da revisão: revogar deixava `enabled:true` + regra ativa → o
+    // menu continuava respondendo com a tela dizendo "Aguardando ativação".
+    // A demote acontece NO MESMO merge (enabled:false) e a regra é apagada com
+    // o MESMO filtro de org que o desligar da Task 6 usa.
+    const mundo = montarMundo(
+      { menu: { concedido: true, enabled: true, rule_id: "rule-1", mantido: "x" } },
+      {
+        regras: [
+          {
+            id: "rule-1",
+            organization_id: ORG_ID,
+            name: "Menu do WhatsApp",
+            trigger_event: "message.received",
+            is_active: true,
+          },
+        ],
+      },
+    );
+    const res = await mundo.PATCH({ recurso: "menu_whatsapp", concedido: false });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ recurso: "menu_whatsapp", concedido: false });
+
+    // Merge RASO com a demote embutida: o resto do bloco sobrevive.
+    expect(mundo.gravado?.menu).toEqual({
+      concedido: false,
+      enabled: false,
+      rule_id: "rule-1",
+      mantido: "x",
+    });
+    // A regra: MESMA linha, contagem 1, is_active=false — nunca some.
+    expect(mundo.regras).toHaveLength(1);
+    expect(mundo.regras[0]?.is_active).toBe(false);
+  });
+
+  it("concedir segue sem demote: enabled gravado é o que já estava", async () => {
+    const mundo = montarMundo({ menu: { enabled: true, mantido: "x" } });
+    const res = await mundo.PATCH({ recurso: "menu_whatsapp", concedido: true });
+    expect(res.status).toBe(200);
+    expect(mundo.gravado?.menu).toEqual({ enabled: true, concedido: true, mantido: "x" });
   });
 
   it("quem não é platform admin (o redirect do guard vira rota): 403 forbidden, nada gravado", async () => {

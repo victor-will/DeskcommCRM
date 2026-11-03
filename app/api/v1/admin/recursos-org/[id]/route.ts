@@ -85,9 +85,23 @@ export async function PATCH(
   const blocoAtual = (settings[chave] ?? {}) as Record<string, unknown>;
   // Merge RASO: só a chave do recurso muda de `concedido` — o resto do bloco
   // e o resto do `settings` são preservados byte a byte.
+  //
+  // ── REVOGAÇÃO desliga junto (achado da revisão) ──────────────────────────
+  // Escrever SÓ `concedido:false` deixava `enabled:true` + regra ativa: o menu
+  // seguia respondendo cada mensagem com a tela já dizendo "Aguardando
+  // ativação". A demote (`enabled:false`) entra no MESMO merge, e a regra de
+  // `rule_id` é desativada em seguida com o MESMO filtro de org do desligar da
+  // Task 6 — a ordem (settings primeiro) é proposital: com a camada
+  // `sem_concessao` da ação, um settings revogado já mata o menu mesmo que a
+  // regra persista ativa (fail-closed na direção certa); o inverso deixaria a
+  // tela ligada com o menu mudo.
+  const revogando = parsed.data.concedido === false;
+  const blocoNovo: Record<string, unknown> = revogando
+    ? { ...blocoAtual, concedido: false, enabled: false }
+    : { ...blocoAtual, concedido: parsed.data.concedido };
   const settingsMesclado = {
     ...settings,
-    [chave]: { ...blocoAtual, concedido: parsed.data.concedido },
+    [chave]: blocoNovo,
   };
 
   const { error: erroGravacao } = await admin
@@ -95,6 +109,25 @@ export async function PATCH(
     .update({ settings: settingsMesclado })
     .eq("id", orgId);
   if (erroGravacao) return fail("internal_error", "Falha ao salvar.", 500, { requestId });
+
+  if (revogando) {
+    const ruleId = blocoNovo.rule_id;
+    if (typeof ruleId === "string") {
+      const { error: erroRegra } = await admin
+        .from("automation_rules")
+        .update({ is_active: false })
+        .eq("id", ruleId)
+        .eq("organization_id", orgId)
+        .select("id");
+      // Escrita parcial documentada: settings já revogado (o menu já parou);
+      // um erro aqui é 500 honesto, e re-rule_id obsoleto (0 linhas) é
+      // tolerado — a mesma régua do desligar da Task 6.
+      if (erroRegra)
+        return fail("internal_error", "Falha ao desligar a regra do menu.", 500, {
+          requestId,
+        });
+    }
+  }
 
   void audit({
     action: "recursos_org.concedido_alterado",
