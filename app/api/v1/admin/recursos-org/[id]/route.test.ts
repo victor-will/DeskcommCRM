@@ -128,6 +128,23 @@ describe("PATCH /api/v1/admin/recursos-org/[id] — a camada (b): concessão da 
     expect(mundo.gravado).toBeNull();
   });
 
+  it("quem não é platform admin (o redirect do guard vira rota): 403 forbidden, nada gravado", async () => {
+    // O caso do plano da Task 9 ("non-platform-admin → 403"), distinto do de
+    // cima: sem LINHA em `platform_admins` o guard real chama
+    // `redirect("/admin/forbidden")` (requirePlatformAdmin.ts:60-62), e em rota
+    // `falhaDaEscritaDePlatformAdmin` mapeia QUALQUER erro que não seja
+    // `EscritaDePlatformAdminNegada` para 403 `forbidden` — por isso o objeto
+    // lançado aqui é um erro COMUM (o NEXT_REDIRECT), não a recusa nomeada.
+    const mundo = montarMundo({ menu: {} });
+    vi.mocked(requirePlatformAdminEscrita).mockRejectedValue(
+      Object.assign(new Error("NEXT_REDIRECT"), { digest: "NEXT_REDIRECT;error" }),
+    );
+    const res = await mundo.PATCH({ recurso: "menu_whatsapp", concedido: true });
+    expect(res.status).toBe(403);
+    expect((res.body as { error: { code: string } }).error.code).toBe("forbidden");
+    expect(mundo.gravado).toBeNull();
+  });
+
   it("acompanhamento somente leitura (support_readonly): 403 antes do efeito", async () => {
     // A guarda de EFEITO (`requireSupportWrite`) é a camada de FORA: ela roda
     // antes do platform-admin e antes de tocar o banco — o gate
