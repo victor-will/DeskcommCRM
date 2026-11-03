@@ -154,6 +154,14 @@ const TEXTO_DO_MODULO: Record<ModuloOpcional, { nome: string; oQueFaz: string }>
     oQueFaz:
       "Um menu de opções em texto que o cliente escolhe respondendo com número, sem IA no caminho: horários, preços, marcação de horário e passagem para um atendente, direto na conversa.",
   },
+  // Unificação de DMs (Addon #1) — a linha do módulo em "Recursos opcionais".
+  // Mesma razão do `menu_whatsapp` acima: `Record<ModuloOpcional, …>` é
+  // exaustivo, sem esta chave o `pnpm typecheck` reprova (TS2741).
+  redes_sociais: {
+    nome: "Redes sociais",
+    oQueFaz:
+      "Recebe as mensagens diretas do Instagram e do Messenger na mesma Inbox do WhatsApp: a empresa conecta os perfis por OAuth em Conexões e o atendimento responde tudo num lugar só.",
+  },
 };
 
 /**

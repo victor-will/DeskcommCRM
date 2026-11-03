@@ -162,6 +162,7 @@ describe("ondeOModuloAparece: a tela pode dizer o que ligar vai mudar", () => {
       "cobranca",
       "login_codex",
       "setores",
+      "redes_sociais",
     ]);
   });
 });
@@ -470,6 +471,49 @@ describe("menu_whatsapp: módulo de tabela, resolvido por modulos_instalados", (
     const ativo = [{ modulo: "menu_whatsapp", estado: "ativo" }];
     expect(
       await moduloLigado(bancoDeModulos({ modulos_instalados: { data: ativo } }).db, "menu_whatsapp"),
+    ).toBe(true);
+  });
+});
+
+/**
+ * ⚠️ O MECANISMO POR BAIXO DA PORTA para módulo por FLAG (platform_config) —
+ * o inverso do `menu_whatsapp` acima: `redes_sociais` (Addon #1, unificação de
+ * DMs) liga pela linha `MODULO_REDES_SOCIAIS`, escrita pelo interruptor de
+ * `/admin/sistema`. Mesma régua dos casos de `banco_externo` em
+ * `lib/instalacao/modulos.test.ts`: linha ausente, outra chave ou outro valor
+ * = DESLIGADO (falha fechada — o que mora atrás da porta é credencial de
+ * outro sistema).
+ */
+describe("redes_sociais: módulo por flag, resolvido por platform_config", () => {
+  it("moduloLigado devolve false com platform_config sem MODULO_REDES_SOCIAIS (fail-closed) e true com valor='ligado'", async () => {
+    // Sem linha nenhuma.
+    expect(await moduloLigado(bancoDeModulos().db, "redes_sociais")).toBe(false);
+    // Outra chave ligada não empresta a luz.
+    expect(
+      await moduloLigado(
+        bancoDeModulos({
+          platform_config: { data: [{ chave: "MODULO_SETORES", valor: "ligado" }] },
+        }).db,
+        "redes_sociais",
+      ),
+    ).toBe(false);
+    // A própria chave com valor que não é `ligado` continua desligada.
+    expect(
+      await moduloLigado(
+        bancoDeModulos({
+          platform_config: { data: [{ chave: "MODULO_REDES_SOCIAIS", valor: "desligado" }] },
+        }).db,
+        "redes_sociais",
+      ),
+    ).toBe(false);
+    // Só `valor='ligado'` acende.
+    expect(
+      await moduloLigado(
+        bancoDeModulos({
+          platform_config: { data: [{ chave: "MODULO_REDES_SOCIAIS", valor: "ligado" }] },
+        }).db,
+        "redes_sociais",
+      ),
     ).toBe(true);
   });
 });

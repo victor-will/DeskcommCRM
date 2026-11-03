@@ -41,7 +41,7 @@ import type pg from "pg";
 import { logger } from "@/lib/logger";
 
 /**
- * `banco_externo`, `fluxos_atendimento`, `propostas`, `crm_b2b`, `cobranca`, `login_codex` e `setores` ligam/desligam por uma linha em `platform_config`
+ * `banco_externo`, `fluxos_atendimento`, `propostas`, `crm_b2b`, `cobranca`, `login_codex`, `setores` e `redes_sociais` ligam/desligam por uma linha em `platform_config`
  * (ver o resto deste arquivo). `honorarios` e `financeiro` são MÓDULOS DE TABELA (ADR-0002): a fonte da
  * verdade é `modulos_instalados`, escrita só por `fn_modulo_instalar` (`lib/modulos/service.ts`),
  * nunca por esta tela. Os dois mecanismos convivem na mesma lista porque é isso que
@@ -67,6 +67,10 @@ export const MODULOS_OPCIONAIS = [
   // `menu_sessoes` nascem pela provisionadora (`fn_menu_whatsapp_provisionar`),
   // então a fonte da verdade é `modulos_instalados`, como os honorários.
   "menu_whatsapp",
+  // Unificação de DMs (Addon #1, spec §3/§45): Instagram DM + Messenger na
+  // mesma Inbox. Módulo por FLAG (linha em `platform_config`), não de tabela —
+  // não há tabela nova nenhuma, e o interruptor é o de `/admin/sistema`.
+  "redes_sociais",
 ] as const;
 export type ModuloOpcional = (typeof MODULOS_OPCIONAIS)[number];
 
@@ -89,6 +93,7 @@ export const MODULOS_OPCIONAIS_POR_FLAG = [
   "cobranca",
   "login_codex",
   "setores",
+  "redes_sociais",
 ] as const satisfies readonly ModuloOpcional[];
 
 /** A linha de cada módulo por FLAG em `platform_config`. O formato é o da CHECK da 0341.
@@ -120,6 +125,10 @@ export const CHAVE_DO_MODULO: Record<(typeof MODULOS_OPCIONAIS_POR_FLAG)[number]
   // organizam e filtram a Equipe e não mudam quem recebe a conversa; quem não
   // usa não vê a aba. Desligado, a aba, a coluna e as rotas somem (404).
   setores: "MODULO_SETORES",
+  // Unificação de DMs (Addon #1): o dono do servidor liga/desliga em
+  // `/admin/sistema`. O formato é o da CHECK da 0341 (`^[A-Z][A-Z0-9_]{2,63}$`)
+  // — `MODULO_REDES_SOCIAIS` casa (ruling: sem migration nova).
+  redes_sociais: "MODULO_REDES_SOCIAIS",
 };
 
 const LIGADO = "ligado";
