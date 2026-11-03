@@ -1757,6 +1757,8 @@ export const DICIONARIO: Traducoes = {
   Funis: { es: "Embudos" },
   "Etapas do funil": { es: "Etapas del embudo" },
   "Tipos de agendamento": { es: "Tipos de cita" },
+  "Menu do WhatsApp": { es: "Menú de WhatsApp" },
+  "Monte o menu de opções que o cliente responde com número — sem IA no caminho.": { es: "Monte el menú de opciones que el cliente responde con un número, sin IA en el camino." },
   Automação: { es: "Automatización" },
   Agentes: { es: "Agentes" },
   "Follow-ups": { es: "Seguimientos" },

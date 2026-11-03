@@ -167,8 +167,14 @@ interface ContextoDaMaquina {
   itens?: ItemDoMenu[];
 }
 
-/** O cardápio: os itens DO BANCO em ordem de `ordem`, ou o G4 fixo como piso. */
-function montarMenu(itens: readonly ItemDoMenu[] | undefined): string {
+/**
+ * O cardápio: os itens DO BANCO em ordem de `ordem`, ou o G4 fixo como piso.
+ *
+ * Exportada na Task 8: a pré-visualização da tela de configuração usa ESTA
+ * função — o texto que a tela mostra é o mesmo que a máquina manda, por
+ * construção, sem o formato do cardápio existir em dois lugares.
+ */
+export function montarMenu(itens: readonly ItemDoMenu[] | undefined): string {
   const ordenados = itens === undefined ? [] : [...itens].sort((a, b) => a.ordem - b.ordem);
   const linhas =
     ordenados.length > 0 ? ordenados.map((i) => `${i.ordem} — ${i.rotulo}`) : LINHAS_DO_MENU_G4;

@@ -433,6 +433,25 @@ export const NAV_CATALOG = [
     // na navegação" — a porta existia, era outra.
   },
   {
+    // O menu de texto sem IA (spec §6.1, plano Task 8): a porta da tela onde o
+    // cliente monta o cardápio. É a entrada que `portaDoModuloNaEmpresa`
+    // (`lib/recursos-opcionais/catalogo.ts`) acha por `d.modulo ===
+    // "menu_whatsapp"` — primeira (e única) que declara o módulo, então ela é a
+    // porta que a tela de Recursos opcionais da EMPRESA anuncia.
+    href: "/app/settings/tenant/menu",
+    label: "Menu do WhatsApp",
+    description: "Monte o menu de opções que o cliente responde com número — sem IA no caminho.",
+    icon: "ListChecks",
+    group: "organizacao",
+    // "Sua empresa", junto de Tipos de agendamento: é configuração do NEGÓCIO,
+    // não da conta de quem está logado.
+    section: "Sua empresa",
+    // SEM `sidebar`: o grupo tem hub ("Configurações"), como as outras entradas
+    // do rodapé — e com o módulo desligado a porta some do menu, do hub e do ⌘K
+    // (`NavMetadata.modulo`), que é o mesmo `moduloLigado` da Task 2.
+    modulo: "menu_whatsapp",
+  },
+  {
     // O aviso de agendamento no WhatsApp do dono (migration 0753). Fica junto
     // dos tipos de agendamento porque é configuração da agenda do NEGÓCIO, não
     // do dia de quem atende. "Aviso de agendamento", nunca "Aviso no WhatsApp":
@@ -440,7 +459,8 @@ export const NAV_CATALOG = [
     // busca não dizem qual é qual.
     href: "/app/agenda/avisos",
     label: "Aviso de agendamento",
-    description: "Receber no WhatsApp cada horário marcado, remarcado ou cancelado, e o resumo das 7h.",
+    description:
+      "Receber no WhatsApp cada horário marcado, remarcado ou cancelado, e o resumo das 7h.",
     icon: "PaperPlaneTilt",
     group: "organizacao",
     section: "Sua empresa",
@@ -465,7 +485,8 @@ export const NAV_CATALOG = [
   {
     href: "/app/settings/tenant/proposals/modelos",
     label: "Modelos de proposta",
-    description: "Personalize os modelos da plataforma ou crie os da sua empresa, inclusive a partir de uma proposta que você já usa.",
+    description:
+      "Personalize os modelos da plataforma ou crie os da sua empresa, inclusive a partir de uma proposta que você já usa.",
     icon: "FileText",
     group: "organizacao",
     section: "Sua empresa",
@@ -582,7 +603,8 @@ export const NAV_CATALOG = [
     // e na busca, e quem usa pode pô-la no menu dela.
     href: "/app/ai/atendimento",
     label: "Fluxos de atendimento",
-    description: "Perguntas que a IA conduz durante a conversa, com as respostas guardadas na ficha do cliente.",
+    description:
+      "Perguntas que a IA conduz durante a conversa, com as respostas guardadas na ficha do cliente.",
     icon: "ListChecks",
     group: "ia",
     section: "Montar o agente",
@@ -624,7 +646,8 @@ export const NAV_CATALOG = [
     label: "Provedores",
     // O "Jev" vem cedo: o ⌘K mostra só o começo da descrição, e a versão
     // longa cortava antes do nome — quem procurava "jev" achava, mas não via por quê.
-    description: "Ligue o Jev para decisões rápidas e escolha qual inteligência atende cada parte do sistema.",
+    description:
+      "Ligue o Jev para decisões rápidas e escolha qual inteligência atende cada parte do sistema.",
     icon: "Plugs",
     group: "ia",
     section: "Montar o agente",
@@ -1005,7 +1028,8 @@ export const NAV_CATALOG = [
     // configuração tem superfície" (docs/doctrine/restricao-de-canal.md).
     href: "/app/settings/automacoes",
     label: "Automações",
-    description: "O freio único do passo em que a IA escolhe entre as opções de uma regra, para a empresa inteira.",
+    description:
+      "O freio único do passo em que a IA escolhe entre as opções de uma regra, para a empresa inteira.",
     icon: "FlowArrow",
     group: "organizacao",
     section: "Sua empresa",
