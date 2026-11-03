@@ -12,6 +12,9 @@ export const ApiErrorCodes = {
   invalid_request: "invalid_request",
   validation_failed: "validation_failed", // Zod retornou erros de schema (422 também aceita)
   invalid_cursor: "invalid_cursor",
+  // 400: o menu da organização já está no teto de 10 itens (plano Task 7) —
+  // remover ou desligar um item antes de criar outro.
+  limite_de_itens: "limite_de_itens",
 
   // Configuração de agentes: validação/estado ou indisponibilidade do provedor.
   prospecting_agent_session_failed: "prospecting_agent_session_failed",
@@ -75,6 +78,9 @@ export const ApiErrorCodes = {
   // retentar depois resolve, enquanto conflito manda trocar a chave.
   idempotency_in_progress: "idempotency_in_progress",
   state_conflict: "state_conflict",
+  // 409: `unique (organization_id, ordem)` em `menu_itens` — outra requisição
+  // pegou a mesma ordem (plano Task 7); a correção é escolher outra ordem.
+  ordem_ocupada: "ordem_ocupada",
   // Escrita vinda de uma aba que ficou numa organização diferente da do cookie
   // `active_org` (#2335). O header `X-Org-Da-Aba` só serve para RECUSAR: a org
   // efetiva continua sendo a do cookie (`lib/auth/require-role.ts`).

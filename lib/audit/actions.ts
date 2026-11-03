@@ -1417,6 +1417,14 @@ export const AUDIT_ACTIONS = [
   // conversa nem telefone.
   "settings.menu_updated",
   "recursos_org.concedido_alterado",
+  // CRUD dos itens do menu (plano Task 7): criar, editar e remover um item, e
+  // o seed dos 4 defaults do G4 (só quando a organização estava vazia). O
+  // metadata leva ids, ordem e tipo — nunca o texto das respostas (append-only,
+  // fora do alcance da cascata de LGPD, mesmo motivo de `ai.knowledge_source_*`).
+  "menu.item_created",
+  "menu.item_updated",
+  "menu.item_deleted",
+  "menu.itens_seeded",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
