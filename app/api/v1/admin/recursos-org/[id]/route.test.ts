@@ -1,16 +1,19 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { fail } from "@/lib/api/wrappers";
 import {
   EscritaDePlatformAdminNegada,
   requirePlatformAdminEscrita,
 } from "@/lib/auth/requirePlatformAdmin";
+import { requireSupportWrite } from "@/lib/impersonate/support";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 vi.mock("@/lib/auth/requirePlatformAdmin", async (orig) => ({
   ...(await orig<typeof import("@/lib/auth/requirePlatformAdmin")>()),
   requirePlatformAdminEscrita: vi.fn(),
 }));
+vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 
@@ -123,5 +126,22 @@ describe("PATCH /api/v1/admin/recursos-org/[id] — a camada (b): concessão da 
     expect(res.status).toBe(403);
     expect((res.body as { error: { code: string } }).error.code).toBe("forbidden_scope");
     expect(mundo.gravado).toBeNull();
+  });
+
+  it("acompanhamento somente leitura (support_readonly): 403 antes do efeito", async () => {
+    // A guarda de EFEITO (`requireSupportWrite`) é a camada de FORA: ela roda
+    // antes do platform-admin e antes de tocar o banco — o gate
+    // `suporte-cobertura-de-efeitos` cobra a chamada, e este caso prova que a
+    // rota a OBEDECE (molde: proposals/[id] passa o `fail` adiante).
+    const mundo = montarMundo({ menu: {} });
+    vi.mocked(requireSupportWrite).mockResolvedValueOnce(
+      fail("forbidden", "Este acompanhamento permite somente leitura.", 403) as never,
+    );
+    const res = await mundo.PATCH({ recurso: "menu_whatsapp", concedido: true });
+    expect(res.status).toBe(403);
+    expect((res.body as { error: { code: string } }).error.code).toBe("forbidden");
+    // Nada gravado, e o guard de platform-admin nem foi consultado.
+    expect(mundo.gravado).toBeNull();
+    expect(requirePlatformAdminEscrita).not.toHaveBeenCalled();
   });
 });

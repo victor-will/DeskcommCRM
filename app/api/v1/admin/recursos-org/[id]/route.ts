@@ -8,6 +8,7 @@ import {
   falhaDaEscritaDePlatformAdmin,
   requirePlatformAdminEscrita,
 } from "@/lib/auth/requirePlatformAdmin";
+import { requireSupportWrite } from "@/lib/impersonate/support";
 import type { Recurso } from "@/lib/menu/recursos";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -29,7 +30,10 @@ const CHAVE_DO_RECURSO = {
  * camadas: quem ADMINISTRA A INSTÂNCIA concede o recurso à organização
  * (`settings.menu.concedido` / `settings.agenda_online.concedido`).
  *
- * Receita da casa: `requirePlatformAdminEscrita` (escrita de admin exige
+ * Receita da casa: `requireSupportWrite()` PRIMEIRO (a guarda de EFEITO do
+ * acompanhamento — barra escrita vinda de `support_readonly`, molde das rotas
+ * admin vizinhas em `admin/cobranca/regua/route.ts`; não substitui as camadas
+ * de baixo), depois `requirePlatformAdminEscrita` (escrita de admin exige
  * `scope === 'full'` + MFA em dia — a cerca de
  * `tests/unit/admin-escrita-exige-scope-full.test.ts`), Zod em TUDO (id da rota
  * e corpo), org do PATH (fonte confiável), leitura+escrita com filtro de org
@@ -41,6 +45,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  const supportDenied = await requireSupportWrite();
+  if (supportDenied) return supportDenied;
+
   const requestId = randomUUID();
 
   let adminCtx: Awaited<ReturnType<typeof requirePlatformAdminEscrita>>;
