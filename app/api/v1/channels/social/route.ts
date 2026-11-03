@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
+import { moduloLigado } from "@/lib/instalacao/modulos";
 import { traduzirLimiteDoPlano } from "@/lib/cobranca/limites";
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
 import {
@@ -146,6 +147,22 @@ export async function POST(req: Request) {
     });
   const body = parsed.data;
   const db = createAdminClient();
+  // ── Gate do módulo `redes_sociais` (Addon #1) — DEPOIS das guardas de sempre ─
+  // Q3 da spec (CONFIRMADO): com a flag desligada só as 4 ações de NOVA
+  // conexão somem (404 — o mesmo "módulo desligado some" do setores/cobrança);
+  // manutenção de quem já conectou (health/resync/disconnect/unlink) passa
+  // reto, e a entrega (ingest/webhook) NUNCA passa por aqui. A ordem é a do
+  // ruling: suporte → papel → MFA → Zod → rate limit → ESTE gate — ele acrescenta
+  // uma recusa, nunca substitui uma guarda.
+  if (
+    (body.action === "profiles" ||
+      body.action === "configure" ||
+      body.action === "authorize" ||
+      body.action === "inbox") &&
+    !(await moduloLigado(db, "redes_sociais"))
+  ) {
+    return fail("not_found", "Not found", 404, { requestId, headers });
+  }
   try {
     let result: unknown;
     if (body.action === "profiles") {
