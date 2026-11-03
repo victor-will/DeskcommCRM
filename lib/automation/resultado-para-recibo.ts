@@ -55,6 +55,7 @@ const CODIGOS_DAS_ACOES = new Set([
   "membro_fora_da_equipe",
   "membro_indeterminado",
   "membro_sem_email",
+  "menu_sessao_nao_gravada",
   "missing_config",
   "missing_input",
   "missing_url",

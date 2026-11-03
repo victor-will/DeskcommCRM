@@ -804,6 +804,7 @@ jobs:
         conversoes-reprocessamento.spec.ts
         pre-go-live-whatsapp.spec.ts
         smoke.spec.ts auth.spec.ts error-pages.spec.ts
+        menu-config.spec.ts
         icone-da-marca.spec.ts
         password-recovery.spec.ts signup-journey.spec.ts
         primeiro-acesso-sem-organizacao.spec.ts

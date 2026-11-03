@@ -284,7 +284,7 @@ export function MenuConfigClient(props: Props) {
       {props.slug !== null && props.erroConfiguracao === null ? (
         <section className="space-y-1" data-testid="link-publico-agenda">
           <h2 className="text-base font-semibold">{t("Link público da agenda")}</h2>
-          <code className="rounded bg-muted px-2 py-1 text-sm">{`/a/${props.slug}`}</code>
+          <code className="rounded-md bg-muted px-2 py-1 text-sm">{`/a/${props.slug}`}</code>
           <p className="text-xs text-muted-foreground">
             {t(
               "Em breve: a página pública de agendamento ainda está em construção — este é o endereço que o cliente vai abrir.",

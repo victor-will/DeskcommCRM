@@ -1782,6 +1782,7 @@ export const DICIONARIO: Traducoes = {
   "Sem leitura não há pré-visualização — a lista acima diz o que houve.": { es: "Sin lectura no hay vista previa — la lista de arriba dice qué ocurrió." },
   "Sem itens, o cliente recebe o cardápio padrão.": { es: "Sin elementos, el cliente recibe el menú predeterminado." },
   "É exatamente a mensagem que o cliente recebe no WhatsApp.": { es: "Es exactamente el mensaje que el cliente recibe en WhatsApp." },
+  "A mensagem do menu saiu, mas o estado da sessão não foi salvo — na próxima o cardápio pode repetir o passo.": { es: "El mensaje del menú salió, pero el estado de la sesión no se guardó — en el próximo mensaje el menú puede repetir el paso." },
   Automação: { es: "Automatización" },
   Agentes: { es: "Agentes" },
   "Follow-ups": { es: "Seguimientos" },

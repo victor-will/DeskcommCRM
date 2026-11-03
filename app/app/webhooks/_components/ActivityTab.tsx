@@ -76,6 +76,11 @@ const MOTIVO_DA_PARADA: Record<string, string> = {
   no_contact: "Esse lead entrou sem contato vinculado, então não havia para quem escrever.",
   contact_blocked: "O contato pediu para não receber mensagens (opt-out).",
   no_phone: "O contato não tem telefone cadastrado.",
+  // O menu de texto (Task 5): a mensagem SAIU e a sessão não gravou — dizer
+  // sucesso esconderia a máquina fora de sincronia. O operador lê o motivo cru
+  // na aba Atividade, então ele precisa da frase aqui E em lib/i18n/dicionario.ts.
+  menu_sessao_nao_gravada:
+    "A mensagem do menu saiu, mas o estado da sessão não foi salvo — na próxima o cardápio pode repetir o passo.",
   /* #3813 — a escolha "não enviar" quando o contato tem horário marcado. O pulo
      é decisão de quem montou a regra/fluxo, não falha: a frase diz o motivo para
      quem lê a aba Atividade não confundir com erro. Emitido por

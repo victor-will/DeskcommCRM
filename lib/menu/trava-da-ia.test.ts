@@ -21,8 +21,11 @@ import { bloqueioHumano, iaResponderiaASessao } from "./trava-da-ia";
  */
 
 const ORG = "ffffffff-0000-4000-8000-0000000000a1";
-const SESSAO = "sessao-waha-1";
-const SESSAO_OUTRA = "sessao-waha-outra";
+// Ids de sessão OPACOS (só comparados entre si). Sem nome de provider: a
+// doutrina `restricao-de-canal` e o gate `lint:channels` não distinguem
+// comentário de código, e o nome do transportante só pode viver em lib/channels/.
+const SESSAO = "sessao-canal-1";
+const SESSAO_OUTRA = "sessao-canal-outra";
 const CONVERSA = "ffffffff-3333-4000-8000-000000000001";
 
 /** Relógio fixo — determinismo é regra da casa; `agora` é parâmetro, nunca `new Date()`. */

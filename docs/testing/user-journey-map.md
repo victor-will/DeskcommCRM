@@ -4157,3 +4157,13 @@ reprova, depois da tentativa de limpeza. Trace e vídeo ficam desligados apenas
 nesta spec para não arquivar URLs assinadas. A limpeza é limitada aos UUIDs
 sintéticos desta execução. A coleta `--list` não é prova de UX; a aceitação
 depende do CI do candidato e da inspeção das capturas produzidas.
+
+
+## J58 - Menu de texto no WhatsApp: configurar e provar `[P1]` (2026-11-03)
+
+| # | Jornada | Prova |
+|---|---|---|
+| J58.1 | Quem administra concede o recurso, o manager abre Configurações › Menu do WhatsApp e vê "Menu desligado" com a chave habilitada; ele liga e o estado vira "Ligado" — o reload confirma no banco | **PASS** - `menu-config.spec.ts`, contra o app real. Evidência: `evidence/menu-config/1-desligado.png`, `evidence/menu-config/2-ligado.png` |
+| J58.2 | Ele adiciona um item pelo formulário da tela, a pré-visualização mostra o MESMO cardápio que o cliente recebe no WhatsApp, e a edição abre com o valor já gravado | **PASS** - `menu-config.spec.ts`. Evidência: `evidence/menu-config/3-editando-item.png` |
+
+A entrada pela porta (hub de Configurações › "Menu do WhatsApp") também é exercitada pela spec: o módulo instalado é pré-condição, e com ele desligado a porta some do menu (`modulo: "menu_whatsapp"` no catálogo de navegação).

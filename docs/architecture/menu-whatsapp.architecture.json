@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Menu de texto no WhatsApp (sem IA)",
+    "subtitle": "O cliente responde com número; a máquina responde por texto puro",
+    "output": "menu-whatsapp.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "entrada",
+      "label": "Canal e cliente"
+    },
+    {
+      "id": "motor",
+      "label": "Motor existente (automações)"
+    },
+    {
+      "id": "config",
+      "label": "Tela e dados"
+    }
+  ],
+  "mainPath": ["waha", "regra", "acao", "maquina", "saida"],
+  "nodes": [
+    {
+      "id": "waha",
+      "lane": "entrada",
+      "col": 1,
+      "type": "service",
+      "label": "Webhook WAHA — message.received"
+    },
+    {
+      "id": "regra",
+      "lane": "motor",
+      "col": 2,
+      "type": "service",
+      "label": "automation_rules (ativação em 3 camadas)"
+    },
+    {
+      "id": "acao",
+      "lane": "motor",
+      "col": 3,
+      "type": "service",
+      "label": "Ação menu_responder (contexto + envio)"
+    },
+    {
+      "id": "maquina",
+      "lane": "motor",
+      "col": 4,
+      "type": "service",
+      "label": "Máquina de estados (serviço → dia → horário)"
+    },
+    {
+      "id": "saida",
+      "lane": "entrada",
+      "col": 5,
+      "type": "service",
+      "label": "Resposta de texto puro ao cliente"
+    },
+    {
+      "id": "dados",
+      "lane": "config",
+      "col": 3,
+      "type": "api",
+      "label": "menu_itens + menu_sessoes (RLS por org)"
+    },
+    {
+      "id": "tela",
+      "lane": "config",
+      "col": 1,
+      "type": "frontend",
+      "label": "Tela de configuração (Settings › Menu do WhatsApp)"
+    }
+  ],
+  "edges": [
+    {
+      "id": "0",
+      "from": "waha",
+      "to": "regra",
+      "label": "mensagem do cliente chega"
+    },
+    {
+      "id": "1",
+      "from": "regra",
+      "to": "acao",
+      "label": "dispara a ação (módulo concedido + cliente ligou)"
+    },
+    {
+      "id": "2",
+      "from": "acao",
+      "to": "maquina",
+      "label": "próximoPasso(entrada, contexto)"
+    },
+    {
+      "id": "3",
+      "from": "acao",
+      "to": "dados",
+      "label": "lê menu_itens; lê/grava menu_sessoes"
+    },
+    {
+      "id": "4",
+      "from": "maquina",
+      "to": "saida",
+      "label": "resposta (nunca botão)"
+    },
+    {
+      "id": "5",
+      "from": "tela",
+      "to": "dados",
+      "label": "CRUD, seed e chave ligar/desligar"
+    }
+  ]
+}
