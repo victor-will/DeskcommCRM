@@ -14407,6 +14407,7 @@ export const DICIONARIO: Traducoes = {
   "Erro ao resolver incidente": { es: "Error al resolver el incidente" },
   "Redes sociais": { es: "Redes sociales" },
   "Recebe as mensagens diretas do Instagram e do Messenger na mesma Inbox do WhatsApp: a empresa conecta os perfis por OAuth em Conexões e o atendimento responde tudo num lugar só.": { es: "Recibe los mensajes directos de Instagram y de Messenger en la misma bandeja de entrada de WhatsApp: la empresa conecta los perfiles por OAuth en Conexiones y la atención responde todo en un solo lugar." },
+  "Conecte também seu Instagram e seu Messenger — as mensagens chegam na mesma caixa de entrada.": { es: "Conecte también su Instagram y su Messenger — los mensajes llegan a la misma bandeja de entrada." },
   "Conecte suas contas e receba mensagens no atendimento.": { es: "Conecta tus cuentas y recibe mensajes en atención." },
   "A autorização não foi concluída. Tente conectar novamente e aceite as permissões necessárias.": { es: "La autorización no se completó. Intenta conectar de nuevo y acepta los permisos necesarios." },
   "Autorização concluída. Confira a conta na lista e ative o atendimento, quando disponível.": { es: "Autorización completada. Revisa la cuenta en la lista y activa la atención cuando esté disponible." },

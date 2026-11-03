@@ -42,6 +42,7 @@ export function ConexoesShell({
   wahaConfigured,
   wacallsConfigured,
   graphParceiro = null,
+  redesSociais,
 }: {
   wahaConfigured: boolean;
   wacallsConfigured: boolean;
@@ -52,13 +53,20 @@ export function ConexoesShell({
    * O rótulo vem do servidor porque a tela não pode nomear provider.
    */
   graphParceiro?: { label: string } | null;
+  /**
+   * O módulo `redes_sociais` (Addon #1) — resolvido no servidor pela página.
+   * `false` = a aba de NOVAS conexões não existe para ninguém (Q3: quem já
+   * conectou continua gerenciando pelas demais ações, lá na rota); `?aba=sociais`
+   * escondido cai na aba padrão, mesmo tratamento do `graph`.
+   */
+  redesSociais: boolean;
 }) {
   const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const abaParam = params.get("aba");
   const aba =
-    abaParam === "sociais"
+    abaParam === "sociais" && redesSociais
       ? "sociais"
       : abaParam === "oficial"
       ? "oficial"
@@ -104,7 +112,7 @@ export function ConexoesShell({
             Aqui fica o CONCEITO; lá dentro o cartão diz de quem se trata. */}
         <TabsTrigger value="parceiro">{t("Provedor parceiro")}</TabsTrigger>
         <TabsTrigger value="telefonia">{t("Telefone")}</TabsTrigger>
-        <TabsTrigger value="sociais">{t("Redes sociais")}</TabsTrigger>
+        {redesSociais && <TabsTrigger value="sociais">{t("Redes sociais")}</TabsTrigger>}
         <TabsTrigger value="voz">{t("Chamada de voz")}</TabsTrigger>
         {graphParceiro && <TabsTrigger value="graph">{graphParceiro.label}</TabsTrigger>}
       </TabsList>
@@ -116,7 +124,11 @@ export function ConexoesShell({
       <TabsContent value="telefonia" className="mt-0">
         <TelefoniaClient />
       </TabsContent>
-      <TabsContent value="sociais" className="mt-0"><RedesSociaisClient /></TabsContent>
+      {redesSociais && (
+        <TabsContent value="sociais" className="mt-0">
+          <RedesSociaisClient />
+        </TabsContent>
+      )}
 
       <TabsContent value="voz" className="mt-0">
         <CanalVozClient wacallsConfigured={wacallsConfigured} />
