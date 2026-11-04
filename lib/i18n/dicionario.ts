@@ -14416,6 +14416,7 @@ export const DICIONARIO: Traducoes = {
   "Esta conta está sem permissão para enviar mensagens. Reconecte para corrigir.": { es: "Esta cuenta está sin permiso para enviar mensajes. Reconecta para corregirlo." },
   "Vincular o provedor": { es: "Vincular el proveedor" },
   "A chave fica cifrada no servidor e não é exibida novamente.": { es: "La clave se guarda cifrada en el servidor y no se vuelve a mostrar." },
+  "Normalmente esta chave vem configurada na sua implantação. Preencha só se estiver reconfigurando o provedor (Zernio).": { es: "Normalmente esta clave viene configurada en tu implementación. Rellénala solo si estás reconfigurando el proveedor (Zernio)." },
   "Buscar perfis": { es: "Buscar perfiles" },
   "Perfil da empresa": { es: "Perfil de la empresa" },
   "Conectar uma rede": { es: "Conectar una red" },

@@ -333,3 +333,26 @@ it("health saudável sem sinais novos: a frase de sempre — e sem reclamar do q
     screen.queryByText(/Faltam permissões|sem permissão para enviar mensagens/),
   ).toBeNull();
 });
+
+// ── Copy do provedor em linguagem de leigo (gap 5) ──────────────────────────
+// O campo da chave só existe para quem ainda não configurou (ou está
+// reconfigurando) — é ali que o jargão "Zernio" soltava sem contexto nenhum.
+
+it("campo da chave: helper de leigo com a copy exata, logo abaixo da nota de cifra", async () => {
+  h.get.mockResolvedValue({
+    data: {
+      configured: false,
+      label: "Partner",
+      networks: [{ id: "instagram", label: "Instagram" }],
+      accounts: [],
+    },
+  });
+  mount();
+  const helper = await screen.findByText(
+    "Normalmente esta chave vem configurada na sua implantação. Preencha só se estiver reconfigurando o provedor (Zernio).",
+  );
+  expect(helper).toBeInTheDocument();
+  // ADD-ONLY: a nota de cifra continua intacta e o helper vem DEPOIS dela.
+  const cifra = screen.getByText("A chave fica cifrada no servidor e não é exibida novamente.");
+  expect(cifra.compareDocumentPosition(helper) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});

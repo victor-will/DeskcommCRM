@@ -1,5 +1,6 @@
 import type * as SocialClient from "@/lib/channels/social/client";
 import { beforeEach, expect, it, vi } from "vitest";
+import { env } from "@/lib/env";
 const h = vi.hoisted(() => {
   // publicBase() exige uma origem https válida; sem `.env` no CI o default é
   // http://localhost:3000 e a ação `resync` recusaria antes de chamar a store.
@@ -196,6 +197,26 @@ it("ressincroniza o webhook sob o tenant confiável, com a origem atual, e audit
     }),
   );
   expect((await call({ action: "resync" })).status).toBe(400);
+});
+
+it("publicBase sem endereço https: 422 com a mensagem nova que orienta o administrador", async () => {
+  // Gap 6: o erro técnico vazava a instrução crua de configuração. O env é
+  // lido NA HORA da chamada (publicBase), então apontar para o default de dev
+  // simula a instalação sem endereço público — e o finally devolve a origem
+  // pros outros casos do arquivo (o resync acima depende de https://crm.test).
+  const original = env.NEXT_PUBLIC_APP_URL;
+  env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+  try {
+    const r = await call({ action: "inbox", account_id: "a".repeat(24) });
+    expect(r.status).toBe(422);
+    const body = await r.json();
+    expect(body.error.code).toBe("social_unavailable");
+    expect(body.error.message).toBe(
+      "O endereço público da instalação não está configurado. Peça ao administrador para definir o endereço público (NEXT_PUBLIC_APP_URL) antes de ativar o recebimento.",
+    );
+  } finally {
+    env.NEXT_PUBLIC_APP_URL = original;
+  }
 });
 
 // ── Gate do módulo `redes_sociais` (Addon #1) ──────────────────────────────

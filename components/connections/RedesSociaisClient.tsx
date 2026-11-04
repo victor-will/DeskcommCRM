@@ -285,6 +285,11 @@ export function RedesSociaisClient() {
             </p>
             <p className="text-xs text-muted-foreground">
               {t(
+                "Normalmente esta chave vem configurada na sua implantação. Preencha só se estiver reconfigurando o provedor (Zernio).",
+              )}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t(
                 "Salvar atualiza a chave em todos os canais deste perfil, inclusive os arquivados.",
               )}
             </p>

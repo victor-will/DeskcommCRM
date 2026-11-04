@@ -62,7 +62,10 @@ const inputSchema = z.discriminatedUnion("action", [
 function publicBase(): string {
   const url = new URL(env.NEXT_PUBLIC_APP_URL);
   if (url.protocol !== "https:" || url.hostname === "placeholder.invalid")
-    throw new SocialError("Configure o endereço público da instalação.", 422);
+    throw new SocialError(
+      "O endereço público da instalação não está configurado. Peça ao administrador para definir o endereço público (NEXT_PUBLIC_APP_URL) antes de ativar o recebimento.",
+      422,
+    );
   return url.origin;
 }
 function failure(error: unknown, requestId: string) {
