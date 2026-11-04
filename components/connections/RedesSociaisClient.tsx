@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { apiClient } from "@/lib/api/client";
 import { canalDesativado } from "@/lib/channels/desativado";
+import { SOCIAL_PROVIDER_LABEL } from "@/lib/channels/social/catalog";
 import { useT } from "@/hooks/i18n/useT";
 import { ChannelAiAccess } from "./ChannelAiAccess";
 import { RenomearConexao } from "./RenomearConexao";
@@ -285,8 +286,9 @@ export function RedesSociaisClient() {
             </p>
             <p className="text-xs text-muted-foreground">
               {t(
-                "Normalmente esta chave vem configurada na sua implantação. Preencha só se estiver reconfigurando o provedor (Zernio).",
-              )}
+                "Normalmente esta chave vem configurada na sua implantação. Preencha só se estiver reconfigurando o provedor",
+              )}{" "}
+              ({SOCIAL_PROVIDER_LABEL}).
             </p>
             <p className="text-xs text-muted-foreground">
               {t(

@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RedesSociaisClient } from "./RedesSociaisClient";
+import { SOCIAL_PROVIDER_LABEL } from "@/lib/channels/social/catalog";
 const h = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), remove: vi.fn(), params: "" }));
 vi.mock("@/lib/api/client", () => ({ apiClient: { get: h.get, post: h.post, delete: h.remove } }));
 // Query string REAL (`connected=1` etc.): `h.params` guarda a string inteira,
@@ -336,7 +337,7 @@ it("health saudável sem sinais novos: a frase de sempre — e sem reclamar do q
 
 // ── Copy do provedor em linguagem de leigo (gap 5) ──────────────────────────
 // O campo da chave só existe para quem ainda não configurou (ou está
-// reconfigurando) — é ali que o jargão "Zernio" soltava sem contexto nenhum.
+// reconfigurando) — é ali que o jargão do provedor soltava sem contexto nenhum.
 
 it("campo da chave: helper de leigo com a copy exata, logo abaixo da nota de cifra", async () => {
   h.get.mockResolvedValue({
@@ -349,7 +350,13 @@ it("campo da chave: helper de leigo com a copy exata, logo abaixo da nota de cif
   });
   mount();
   const helper = await screen.findByText(
-    "Normalmente esta chave vem configurada na sua implantação. Preencha só se estiver reconfigurando o provedor (Zernio).",
+    `Normalmente esta chave vem configurada na sua implantação. Preencha só se estiver reconfigurando o provedor (${SOCIAL_PROVIDER_LABEL}).`,
+  );
+  // Byte-idêntico no DOM: `textContent` cru, sem o normalizador de espaços do
+  // Testing Library — se a emenda do parêntese renderizar espaço a mais ou
+  // menos, este teste acusa.
+  expect(helper.textContent).toBe(
+    `Normalmente esta chave vem configurada na sua implantação. Preencha só se estiver reconfigurando o provedor (${SOCIAL_PROVIDER_LABEL}).`,
   );
   expect(helper).toBeInTheDocument();
   // ADD-ONLY: a nota de cifra continua intacta e o helper vem DEPOIS dela.
