@@ -2,9 +2,10 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { sql } from "./gov-helpers";
+import { provisionadorasDoCatalogo } from "./molde-de-provisionadora";
 
 /**
  * TODO `onConflict` APONTA PARA UMA CONSTRAINT QUE EXISTE.
@@ -120,6 +121,28 @@ describe("onConflict × constraints reais", () => {
   const todos = arquivos.map(usosDe);
   const usos = todos.flatMap((t) => t.usos);
   const naoResolvidos = todos.flatMap((t) => t.naoResolvidos);
+
+  /**
+   * PROVISION-THEN-CHECK (rodada de fix da Task 9 — justificativa exigida pela
+   * doutrina de `tests/invariants/` em CONTRIBUTING.md:177-191: não afrouxar a
+   * lei, dizer a razão).
+   *
+   * As tabelas ADR-0002 (ex.: `menu_sessoes`) não vêm do baseline — nascem na
+   * provisionadora `fn_%_provisionar` (molde: `menu-rls.test.ts` chama
+   * `fn_menu_whatsapp_provisionar()` antes de afirmar; `adr-0002-d8` roda
+   * `provisionadorasDoCatalogo()` no `beforeAll`). Sem provisionar, a conferência
+   * abaixo reprovava o uso pela AUSÊNCIA da tabela no banco nu ("não tem NENHUM
+   * índice único") — o instrumento media a falta do cenário, não a lei.
+   *
+   * A lei não afrouxa: provisiona-se o catálogo inteiro e a mesma asserção passa
+   * a ser aplicada ONDE a tabela existe — é ela que o `upsert` encontra em
+   * produção, e um `unique` faltando na provisionadora passa a ser pego aqui.
+   */
+  beforeAll(() => {
+    for (const p of provisionadorasDoCatalogo()) {
+      sql(`select public.${p.nome}();`);
+    }
+  });
 
   it("a varredura ENXERGA usos — controle positivo", () => {
     // Sem isto, um regex quebrado devolveria zero usos e o caso abaixo passaria
