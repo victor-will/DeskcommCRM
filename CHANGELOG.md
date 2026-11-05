@@ -8,7 +8,7 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
-## [1.99.0] — 2026-11-05
+## [1.102.0] - 2026-11-05
 
 ### Adicionado
 
