@@ -18965,6 +18965,11 @@ export const DICIONARIO: Traducoes = {
   },
   "Ligado, cada empresa ganha na Equipe a aba Setores, para agrupar os atendentes por área, e a aba Atendimento passa a mostrar e filtrar o setor de cada um. A conversa com setor definido vai só para quem atende aquele setor, dentro do horário dele; conversa sem setor continua indo pelo número. Desligado, a aba e a coluna somem e a distribuição volta a ser a de antes; os setores já cadastrados ficam guardados.": { es: "Activado, cada empresa obtiene en Equipo la pestaña Sectores, para agrupar a los asesores por área, y la pestaña Atención pasa a mostrar y filtrar el sector de cada uno. La conversación con sector definido va solo a quien atiende ese sector, dentro de su horario; la conversación sin sector sigue yendo por el número. Desactivado, la pestaña y la columna desaparecen y la distribución vuelve a ser la de antes; los sectores ya registrados quedan guardados." },
   "Não cria porta no menu do CRM: ele libera uma aba em": { es: "No crea entrada en el menú del CRM: habilita una pestaña en" },
+  // Unificação de DMs (Addon #1): a descrição do módulo em /admin/sistema, a
+  // última irmã da tela sem espanhol. `t(m.descricao)` é propriedade de variável
+  // de iteração — o gate que coleta literais (issue #603) não a enxerga, por isso
+  // a entrada nasce aqui, byte a byte igual ao `_form.tsx`.
+  "Ligado, cada empresa ganha na aba Redes sociais de Conexões o passo para conectar perfis do Instagram e do Messenger: as mensagens diretas dos dois caem na mesma Inbox do WhatsApp, sem abrir outro aplicativo. Desligado, a aba some e novas conexões são barradas — os perfis já conectados continuam recebendo normalmente.": { es: "Activado, cada empresa obtiene en Conexiones la pestaña Redes sociales el paso para conectar perfiles de Instagram y de Messenger: los mensajes directos de los dos caen en la misma Inbox de WhatsApp, sin abrir otra aplicación. Desactivado, la pestaña desaparece y las nuevas conexiones quedan bloqueadas — los perfiles ya conectados siguen recibiendo con normalidad." },
   'Para não depender do dado, ponha um texto de reserva: {{primeiro_nome|"aluno"}}.': {
     es: 'Para no depender del dato, pon un texto de respaldo: {{primeiro_nome|"alumno"}}.',
   },
