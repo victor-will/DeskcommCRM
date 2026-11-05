@@ -319,6 +319,28 @@ export const MODULOS_NA_TELA: ReadonlyArray<{
     foraDoMenu: "Não cria porta no menu do CRM: ele libera um painel em",
     painelEm: "/app/ai/credentials",
   },
+  {
+    modulo: "setores",
+    id: "modulo-setores",
+    rotulo: "Setores de atendimento",
+    descricao:
+      "Ligado, cada empresa ganha na Equipe a aba Setores, para agrupar os atendentes por área, e a aba Atendimento passa a mostrar e filtrar o setor de cada um. A conversa com setor definido vai só para quem atende aquele setor, dentro do horário dele; conversa sem setor continua indo pelo número. Desligado, a aba e a coluna somem e a distribuição volta a ser a de antes; os setores já cadastrados ficam guardados.",
+    foraDoMenu: "Não cria porta no menu do CRM: ele libera uma aba em",
+    painelEm: "/app/team",
+  },
+  {
+    // Unificação de DMs (Addon #1, spec §3/§45): Instagram DM + Messenger na
+    // mesma Inbox do WhatsApp. O que o interruptor faz é da resposta Q3 da
+    // spec (CONFIRMADO): liga descoberta e novas conexões; desligado a aba some
+    // e novas conexões são barradas, mas quem já conectou segue recebendo.
+    modulo: "redes_sociais",
+    id: "modulo-redes-sociais",
+    rotulo: "Redes sociais",
+    descricao:
+      "Ligado, cada empresa ganha na aba Redes sociais de Conexões o passo para conectar perfis do Instagram e do Messenger: as mensagens diretas dos dois caem na mesma Inbox do WhatsApp, sem abrir outro aplicativo. Desligado, a aba some e novas conexões são barradas — os perfis já conectados continuam recebendo normalmente.",
+    foraDoMenu: "Não cria porta no menu do CRM: ele libera uma aba em",
+    painelEm: "/app/connections",
+  },
 ];
 
 /**

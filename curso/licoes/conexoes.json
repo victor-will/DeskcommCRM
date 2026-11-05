@@ -1212,7 +1212,7 @@
         {
           "id": "p5",
           "titulo": "Redes sociais",
-          "texto": "A aba \"Redes sociais\" traz as mensagens das suas contas em redes sociais para o atendimento. Ela usa um provedor externo que você precisa contratar. Primeiro cole a \"Chave de API\" desse provedor e clique em \"Buscar perfis\". Escolha o perfil da empresa e clique em \"Salvar conexão\". Depois autorize cada rede em \"Autorizar conta\" e, no cartão da conta, clique em \"Receber no atendimento\" para as mensagens entrarem na Inbox.",
+          "texto": "A aba \"Redes sociais\" aparece na tela de Conexões quando o recurso está ativo nesta instalação — se você não a vê, quem cuida da instalação precisa ligá-lo. É por ali que as mensagens das suas contas em redes sociais entram no atendimento. A \"Chave de API\" vem configurada na implantação, como avisa o texto embaixo do campo: \"Normalmente esta chave vem configurada na sua implantação. Preencha só se estiver reconfigurando o provedor (Zernio).\" No dia a dia você não digita chave nenhuma: o campo só aparece ao reconfigurar, e aí segue por \"Buscar perfis\", o perfil da empresa e \"Salvar conexão\". Depois autorize cada rede em \"Autorizar conta\"; ao voltar, o aviso \"Autorização concluída! Agora ative o recebimento para que as mensagens cheguem ao atendimento.\" aponta o passo final: no cartão da conta, clique em \"Receber no atendimento\" para as mensagens entrarem na Inbox. Se a conexão pedir atenção, o aviso diz o que fazer — como reconectar a conta e aceitar as permissões que faltam.",
           "rota": "/app/connections?aba=sociais",
           "antes": [
             {

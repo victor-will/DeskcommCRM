@@ -262,6 +262,9 @@ dc() {
   # dos overlays de modo e de proxy, que é a ordem em que o compose aplica.
   local -a ca=()
   if ca_do_supabase_ok && [ -f docker-compose.supabase-ca.yml ]; then ca=(-f docker-compose.supabase-ca.yml); fi
+  # Rede do Supabase self-hosted no MESMO host: sem este overlay o compose recria
+  # app/worker/scheduler só nas redes do CRM e `supabase-db` deixa de resolver.
+  if rede_do_supabase_ok && [ -f docker-compose.supabase-rede.yml ]; then ca+=(-f docker-compose.supabase-rede.yml); fi
   if [ "${SINGLE_SERVER:-0}" = "1" ]; then
     # #2099: o single-server também respeita o proxy da hospedagem. Os dois
     # ramos eram `if SINGLE_SERVER` → return ANTES do seletor, então o
@@ -294,6 +297,9 @@ dc_files() {
   local sufixo=""
   if ca_do_supabase_ok && [ -f docker-compose.supabase-ca.yml ]; then
     sufixo=" -f docker-compose.supabase-ca.yml"
+  fi
+  if rede_do_supabase_ok && [ -f docker-compose.supabase-rede.yml ]; then
+    sufixo="${sufixo} -f docker-compose.supabase-rede.yml"
   fi
   if [ "${SINGLE_SERVER:-0}" = "1" ]; then
     # #2099: mesma junção de dc() — a lista de -f tem de bater com o que dc()
@@ -371,6 +377,22 @@ ca_do_supabase() {
 # compose criar um DIRETÓRIO no lugar da CA e subir o app sem ela.
 ca_do_supabase_ok() { ca_do_supabase >/dev/null 2>&1; }
 
+# SUPABASE_DOCKER_NETWORK: nome da rede docker de um Supabase self-hosted que roda
+# no mesmo host (ex.: supabase_default). Só vale se a rede existir — uma rede
+# `external` ausente derruba o `up` inteiro.
+rede_do_supabase_ok() {
+  [ -n "${SUPABASE_DOCKER_NETWORK:-}" ] && docker network inspect "$SUPABASE_DOCKER_NETWORK" >/dev/null 2>&1
+}
+
+# A chave declarada com a rede ausente deixa o overlay de fora sem um pio, e o
+# `supabase-db` volta a não resolver no próximo `up -d`. Uma linha no log da
+# atualização (que a tela mostra) aponta a causa antes do rollback.
+aviso_rede_do_supabase() {
+  if [ -n "${SUPABASE_DOCKER_NETWORK:-}" ] && ! rede_do_supabase_ok; then
+    c_ylw "⚠ SUPABASE_DOCKER_NETWORK=$SUPABASE_DOCKER_NETWORK está no .env, mas essa rede não existe neste servidor (docker network ls). Sigo SEM ligar o CRM à rede do Supabase; se o banco é o supabase-db, o worker não vai achá-lo. Corrija o nome no .env ou suba o Supabase antes de atualizar."
+  fi
+}
+
 # psql/pg_dump efêmeros. No modo single-server o Postgres só é alcançável pela
 # bridge privada (supabase-db), nunca por porta pública.
 #
@@ -382,7 +404,10 @@ ca_do_supabase_ok() { ca_do_supabase >/dev/null 2>&1; }
 pg_container() {
   local -a rede=() ca=()
   local caminho=""
-  [ -n "${PSQL_DOCKER_NETWORK:-}" ] && rede=(--network "$PSQL_DOCKER_NETWORK")
+  # Sem PSQL_DOCKER_NETWORK, a rede do Supabase do mesmo host serve também ao
+  # psql/pg_dump do kit (backup, baseline): quem declarou uma não declara duas.
+  if [ -n "${PSQL_DOCKER_NETWORK:-}" ]; then rede=(--network "$PSQL_DOCKER_NETWORK")
+  elif rede_do_supabase_ok; then rede=(--network "$SUPABASE_DOCKER_NETWORK"); fi
   # `local caminho` na linha de cima, não em `local caminho="$(...)"`: com a
   # atribuição junto, o status do comando substituído some dentro do `local` e
   # este `if` aceitaria uma CA quebrada como se estivesse pronta.
@@ -2450,7 +2475,7 @@ ler_rodada_do_banco() {
 # `publish-image.yml` digam o mesmo. Se você é um fork, é lá que está a lista do
 # que trocar junto — e, desde 18/09/2026, o CI do SEU fork não cobra este valor:
 # a asserção só vale quando o dono do runner é o dono deste repositório.
-IMG_NS="ghcr.io/melgarafael"
+IMG_NS="ghcr.io/victor-will"
 IMG_APP="${IMG_NS}/deskcommcrm"
 IMG_WORKER="${IMG_NS}/deskcomm-worker"
 IMG_SCHEDULER="${IMG_NS}/deskcomm-scheduler"
@@ -2470,7 +2495,7 @@ IMG_VOICE_AGENT="${IMG_NS}/deskcomm-voice-agent"
 # alguém porque não deu para resolver um número de versão seria trocar um
 # problema de previsibilidade por um de disponibilidade.
 ultima_versao_publicada() {
-  local url="${1:-https://github.com/melgarafael/DeskcommCRM.git}" ref
+  local url="${1:-https://github.com/victor-will/DeskcommCRM.git}" ref
   command -v git >/dev/null 2>&1 || return 0
   # `grep -v -- -` descarta PRERELEASE (v1.11.0-rc1, v1.1.1-jmpo.1 — esta última
   # existe de verdade neste repo). O `--sort=-v:refname` do git põe o prerelease

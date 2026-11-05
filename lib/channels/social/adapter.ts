@@ -2,10 +2,9 @@ import { MAX_MEDIA_BYTES, MediaTooLargeError } from "@/lib/messaging/media/types
 import { z } from "zod";
 import { assertSafeOutboundUrl } from "@/lib/automation/outbound-url";
 import { assertDestinoResolvidoSeguro } from "@/lib/automation/outbound-ip";
-import { zernioBaseUrl } from "../zernio/credentials";
+import { resolveZernioCreds, zernioBaseUrl } from "../zernio/credentials";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { zernioAdapter } from "../adapters/zernio";
-import { zernioCredsForAccountId } from "../zernio/credentials";
 import { socialMessageId, SOCIAL_PROVIDER } from "./catalog";
 import { socialRequest } from "./client";
 import type { ChannelAdapter } from "../types";
@@ -28,7 +27,7 @@ export const socialAdapter: ChannelAdapter = {
       .maybeSingle();
     if (!(data?.metadata as Record<string, unknown>)?.social_webhook_id)
       return { reachable: true, status: "FAILED", detail: "recebimento_nao_configurado" };
-    const creds = await zernioCredsForAccountId(db, {
+    const creds = await resolveZernioCreds(db, {
       organizationId: input.organizationId,
       accountId: input.sessionRef,
     });
@@ -53,7 +52,7 @@ export const socialAdapter: ChannelAdapter = {
     const url = new URL(input.url);
     assertSafeOutboundUrl(url.toString());
     await assertDestinoResolvidoSeguro(url.hostname);
-    const creds = await zernioCredsForAccountId(createAdminClient(), {
+    const creds = await resolveZernioCreds(createAdminClient(), {
       organizationId: input.organizationId,
       accountId: input.sessionRef,
     });
@@ -106,7 +105,7 @@ export const socialAdapter: ChannelAdapter = {
       throw new Error("Aguarde uma mensagem do cliente para responder nesta rede.");
     if (!["text", "image", "video", "audio"].includes(envelope.kind))
       throw new Error("Este tipo de mensagem ainda não é suportado nesta rede.");
-    const creds = await zernioCredsForAccountId(createAdminClient(), {
+    const creds = await resolveZernioCreds(createAdminClient(), {
       organizationId: envelope.organizationId,
       accountId: envelope.sessionRef,
     });

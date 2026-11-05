@@ -317,26 +317,41 @@ export const NAV_CATALOG = [
     // Tarefas: quem atende confere ligações perdidas e transcrições no dia a
     // dia, não como revisão deliberada.
     //
-    // ─── SEM `sidebar`, e a razão não é gosto: a telefonia é MÓDULO OPCIONAL ───
+    // ─── MÓDULO OPCIONAL: só aparece com a telefonia ligada PARA A ORGANIZAÇÃO ─
     //
     // O dono decidiu (doc 27) que a telefonia por SIP entra desligada por
     // padrão — quem não liga não tem os contêineres, não tem tronco e não tem
-    // ligação nenhuma para ver. Pôr a porta no sidebar de TODA instalação
-    // custaria a todas elas um item que quase nenhuma usa, e o preço é medido:
-    // `tests/e2e/navegacao.spec.ts` exige que, em 900px, o menu caiba inteiro
-    // sem rolagem, e o vigésimo item o faz rolar.
+    // ligação nenhuma para ver.
     //
-    // O ideal seria mostrá-la SÓ para quem ligou o módulo, e isso hoje não é
-    // possível: "telefonia ligada" é um profile do docker compose (servidor),
-    // não um estado que o aplicativo conheça — o shell não consulta nada de
-    // telefonia, e os dois sinais de banco possíveis (linha em
-    // `voip_trunk_settings`, ou `phone_numbers` ativo) custariam uma consulta
-    // em todo render. Está desenhado na issue do `sidebarSe`.
+    // Até a #1290 este item aparecia para todo mundo e levava a uma tela vazia:
+    // o menu oferecia uma porta que não funcionava. Hoje ele declara
+    // `capacidade: "telefonia"` e o filtro de `permitidos()` o esconde de quem
+    // não tem o módulo em uso. A decisão sai de `capacidades_ligadas`, a MESMA
+    // lista que já governa Propostas — não há uma segunda régua para a
+    // telefonia: `lib/telefonia/em-uso.ts` responde "esta organização salvou o
+    // tronco?", e `capacidadesLigadas()` soma essa resposta à lista.
     //
-    // A porta NÃO sumiu: ela vive no hub do grupo CRM ("Ver tudo em CRM") e no
-    // ⌘K, que é o mesmo caminho das outras dez entradas de "organizacao".
-    // CONDIÇÃO QUE ENCERRA ESTA EXCEÇÃO: no dia em que o app souber que o
-    // módulo está ligado, o item volta ao sidebar para quem ligou.
+    // Por que o sinal é o tronco, e não o profile do compose: "telefonia
+    // ligada" na INSTALAÇÃO é `COMPOSE_PROFILES` no servidor, que o aplicativo
+    // não lê (`lib/recursos-opcionais/catalogo.ts`, `telefonia_sip`:
+    // `ler: () => "nao_verificado"`). O tronco é o primeiro estado que a
+    // organização produz e que o app enxerga; sem ele não há chamada possível.
+    // Efeito colateral aceito e declarado: instalação com o profile de pé e
+    // nenhum tronco salvo não mostra o item — a tela, vazia, não faria falta, e
+    // o tronco se cadastra em `/app/settings/voip-trunk`, não aqui.
+    //
+    // SEGUE FORA DO SIDEBAR, e isso é independente do filtro: o menu de 900px
+    // (`tests/e2e/navegacao.spec.ts:222`) cabe com 19 itens e rola com o
+    // vigésimo. A porta vive no hub do grupo CRM ("Ver tudo em CRM") e no ⌘K —
+    // os dois passam pela mesma projeção, então o item some dos dois quando a
+    // telefonia está desligada, e a navegação direta por URL continua
+    // respondendo como sempre (esconder do menu nunca foi autorização).
+    //
+    // ADMINISTRADOR DA INSTALAÇÃO não tem exceção aqui, e isso também é medição,
+    // não escolha nova: `permitidos()` aplica `modulo`/`capacidade` DEPOIS de
+    // `canSee()`, então platform admin já não vê porta de capacidade desligada
+    // hoje (ver `tests/unit/navegacao-registry.test.ts`). Bypass só existe para
+    // PAPEL (`canSee`), que é outra pergunta.
     href: "/app/calls",
     label: "Chamadas",
     description: "Histórico de ligações (voz por IA) com transcrição.",
@@ -344,6 +359,7 @@ export const NAV_CATALOG = [
     group: "crm",
     section: "O dia a dia da venda",
     minRole: "manager",
+    capacidade: "telefonia",
   },
   {
     // ⚠️ Esta tela nasceu porque a FERRAMENTA já existia sem ela. O agente de IA
@@ -417,6 +433,25 @@ export const NAV_CATALOG = [
     // na navegação" — a porta existia, era outra.
   },
   {
+    // O menu de texto sem IA (spec §6.1, plano Task 8): a porta da tela onde o
+    // cliente monta o cardápio. É a entrada que `portaDoModuloNaEmpresa`
+    // (`lib/recursos-opcionais/catalogo.ts`) acha por `d.modulo ===
+    // "menu_whatsapp"` — primeira (e única) que declara o módulo, então ela é a
+    // porta que a tela de Recursos opcionais da EMPRESA anuncia.
+    href: "/app/settings/tenant/menu",
+    label: "Menu do WhatsApp",
+    description: "Monte o menu de opções que o cliente responde com número — sem IA no caminho.",
+    icon: "ListChecks",
+    group: "organizacao",
+    // "Sua empresa", junto de Tipos de agendamento: é configuração do NEGÓCIO,
+    // não da conta de quem está logado.
+    section: "Sua empresa",
+    // SEM `sidebar`: o grupo tem hub ("Configurações"), como as outras entradas
+    // do rodapé — e com o módulo desligado a porta some do menu, do hub e do ⌘K
+    // (`NavMetadata.modulo`), que é o mesmo `moduloLigado` da Task 2.
+    modulo: "menu_whatsapp",
+  },
+  {
     // O aviso de agendamento no WhatsApp do dono (migration 0753). Fica junto
     // dos tipos de agendamento porque é configuração da agenda do NEGÓCIO, não
     // do dia de quem atende. "Aviso de agendamento", nunca "Aviso no WhatsApp":
@@ -424,7 +459,8 @@ export const NAV_CATALOG = [
     // busca não dizem qual é qual.
     href: "/app/agenda/avisos",
     label: "Aviso de agendamento",
-    description: "Receber no WhatsApp cada horário marcado, remarcado ou cancelado, e o resumo das 7h.",
+    description:
+      "Receber no WhatsApp cada horário marcado, remarcado ou cancelado, e o resumo das 7h.",
     icon: "PaperPlaneTilt",
     group: "organizacao",
     section: "Sua empresa",
@@ -449,7 +485,8 @@ export const NAV_CATALOG = [
   {
     href: "/app/settings/tenant/proposals/modelos",
     label: "Modelos de proposta",
-    description: "Personalize os modelos da plataforma ou crie os da sua empresa, inclusive a partir de uma proposta que você já usa.",
+    description:
+      "Personalize os modelos da plataforma ou crie os da sua empresa, inclusive a partir de uma proposta que você já usa.",
     icon: "FileText",
     group: "organizacao",
     section: "Sua empresa",
@@ -566,7 +603,8 @@ export const NAV_CATALOG = [
     // e na busca, e quem usa pode pô-la no menu dela.
     href: "/app/ai/atendimento",
     label: "Fluxos de atendimento",
-    description: "Perguntas que a IA conduz durante a conversa, com as respostas guardadas na ficha do cliente.",
+    description:
+      "Perguntas que a IA conduz durante a conversa, com as respostas guardadas na ficha do cliente.",
     icon: "ListChecks",
     group: "ia",
     section: "Montar o agente",
@@ -608,7 +646,8 @@ export const NAV_CATALOG = [
     label: "Provedores",
     // O "Jev" vem cedo: o ⌘K mostra só o começo da descrição, e a versão
     // longa cortava antes do nome — quem procurava "jev" achava, mas não via por quê.
-    description: "Ligue o Jev para decisões rápidas e escolha qual inteligência atende cada parte do sistema.",
+    description:
+      "Ligue o Jev para decisões rápidas e escolha qual inteligência atende cada parte do sistema.",
     icon: "Plugs",
     group: "ia",
     section: "Montar o agente",
@@ -989,7 +1028,8 @@ export const NAV_CATALOG = [
     // configuração tem superfície" (docs/doctrine/restricao-de-canal.md).
     href: "/app/settings/automacoes",
     label: "Automações",
-    description: "O freio único do passo em que a IA escolhe entre as opções de uma regra, para a empresa inteira.",
+    description:
+      "O freio único do passo em que a IA escolhe entre as opções de uma regra, para a empresa inteira.",
     icon: "FlowArrow",
     group: "organizacao",
     section: "Sua empresa",
@@ -1184,6 +1224,29 @@ export const NAV_CATALOG = [
     // Módulo opcional da instalação, desligado por padrão (doc 37): a porta só
     // existe onde quem administra o servidor o ligou, em `/admin/sistema`.
     modulo: "banco_externo",
+  },
+  {
+    // A porta da ajuda dentro do produto (issue #3567, fatia F1). Fica por
+    // ÚLTIMO, e isso é a decisão e não a sobra: é o que se procura quando o
+    // resto não respondeu.
+    //
+    // `sidebar: true` porque o grupo `organizacao` é o RODAPÉ FIXO do menu: o
+    // `Sidebar` não desenha os itens deste grupo como lista (ele os hospeda no
+    // hub de Configurações) — o rodapé mostra o hub e o `VersionFooter`. É o
+    // `Sidebar` que lê este item pelo `href` para pôr "Ajuda" embaixo de
+    // Configurações, sem uma segunda lista para manter em sincronia.
+    //
+    // `section` própria porque as três vizinhas do grupo são "Sua conta",
+    // "Dados e acesso" e "Sua empresa" — nenhuma delas é ajuda, e chamar de
+    // configuração o que é socorro seria mentir na única tela em que a pessoa
+    // já está perdida.
+    href: "/app/ajuda",
+    label: "Ajuda",
+    description: "O caminho para cada tarefa, e onde ir quando algo não sai como esperado.",
+    icon: "BookOpen",
+    group: "organizacao",
+    section: "Ajuda",
+    sidebar: true,
   },
 ] as const satisfies readonly NavMetadata[];
 

@@ -58,6 +58,13 @@ export interface FontesDeEstado {
   settings: Record<string, unknown> | null;
   /** Detecção dos recursos do servidor, por `id`. Ausente/`null` = não detectado. */
   servidor: Readonly<Record<string, boolean | null>>;
+  /**
+   * A telefonia está em uso NESTA organização (#1290) — o mesmo sinal que decide
+   * o item Chamadas no menu (`lib/telefonia/em-uso.ts`): o tronco SIP salvo.
+   * `null` = não lido. Booleano porque a leitura compartilhada falha fechada e
+   * não distingue "desligada" de "não li" — igual a `modulosLigados()`.
+   */
+  telefonia: boolean | null;
 }
 
 export interface RecursoOpcional {
@@ -133,6 +140,27 @@ const TEXTO_DO_MODULO: Record<ModuloOpcional, { nome: string; oQueFaz: string }>
     nome: "Login do Codex por assinatura",
     oQueFaz:
       "Conecta a assinatura do ChatGPT (o mesmo login do Codex): cada empresa conecta a própria conta, em Credenciais, com a chave de API da mesma empresa como reserva. Desligado por padrão.",
+  },
+  setores: {
+    nome: "Setores de atendimento",
+    oQueFaz:
+      "Agrupa os atendentes da Equipe por área e distribui as conversas que têm setor definido entre quem atende aquela área, dentro do horário do setor. Conversa sem setor continua indo pelo número, como antes.",
+  },
+  // Menu de texto no WhatsApp sem IA — a linha do módulo em "Recursos opcionais".
+  // `TEXTO_DO_MODULO` é `Record<ModuloOpcional, …>` exaustivo: sem esta chave o
+  // `pnpm typecheck` reprova (TS2741), e a área perderia o que o módulo faz.
+  menu_whatsapp: {
+    nome: "Menu no WhatsApp (sem IA)",
+    oQueFaz:
+      "Um menu de opções em texto que o cliente escolhe respondendo com número, sem IA no caminho: horários, preços, marcação de horário e passagem para um atendente, direto na conversa.",
+  },
+  // Unificação de DMs (Addon #1) — a linha do módulo em "Recursos opcionais".
+  // Mesma razão do `menu_whatsapp` acima: `Record<ModuloOpcional, …>` é
+  // exaustivo, sem esta chave o `pnpm typecheck` reprova (TS2741).
+  redes_sociais: {
+    nome: "Redes sociais",
+    oQueFaz:
+      "Recebe as mensagens diretas do Instagram e do Messenger na mesma Inbox do WhatsApp: a empresa conecta os perfis por OAuth em Conexões e o atendimento responde tudo num lugar só.",
   },
 };
 
@@ -461,6 +489,17 @@ const DA_EMPRESA: RecursoOpcional[] = [
     ler: peloSettings((s) => objeto(s.crm)?.cliente_pela_agenda === true),
   },
   {
+    id: "cliente_pela_venda",
+    nome: "Quem já comprou volta pelo funil de clientes",
+    oQueFaz:
+      "Contato com negócio ganho e nenhum aberto entra no funil de clientes, não no de captação.",
+    nivel: "organizacao",
+    padrao: "desligado",
+    quemDecide: "admin",
+    href: "/app/settings/atendimento",
+    ler: peloSettings((s) => objeto(s.crm)?.cliente_pela_venda === true),
+  },
+  {
     id: "colegas_mexem_na_agenda",
     nome: "Atendentes podem mexer na agenda dos colegas",
     oQueFaz: "Qualquer atendente marca e remarca na agenda de outro.",
@@ -599,6 +638,25 @@ const DA_EMPRESA: RecursoOpcional[] = [
     padrao: "desligado",
     quemDecide: "admin",
     href: "/app/extensions",
+  },
+  {
+    /**
+     * O par da empresa para a telefonia (#1290), no molde de
+     * `propostas_da_empresa`: `telefonia_sip` é o profile do servidor, que o app
+     * não lê; ESTA linha é o que a empresa fez — salvou o tronco em
+     * `/app/settings/voip-trunk`. É o mesmo sinal que o menu lê para mostrar (ou
+     * esconder) Chamadas: uma régua, dois lugares.
+     */
+    id: "telefonia_da_empresa",
+    nome: "Telefonia da empresa",
+    oQueFaz:
+      "Com o servidor preparado para telefonia, a empresa salva o tronco SIP da operadora e passa a ver as ligações em Chamadas.",
+    nivel: "organizacao",
+    padrao: "desligado",
+    quemDecide: "admin",
+    href: "/app/settings/voip-trunk",
+    capacidade: "telefonia",
+    ler: (f) => (f.telefonia === null ? "nao_lido" : f.telefonia ? "ligado" : "desligado"),
   },
   {
     id: "propostas_da_empresa",
