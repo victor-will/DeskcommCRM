@@ -4167,3 +4167,10 @@ depende do CI do candidato e da inspeção das capturas produzidas.
 | J58.2 | Ele adiciona um item pelo formulário da tela, a pré-visualização mostra o MESMO cardápio que o cliente recebe no WhatsApp, e a edição abre com o valor já gravado | **PASS** - `menu-config.spec.ts`. Evidência: `evidence/menu-config/3-editando-item.png` |
 
 A entrada pela porta (hub de Configurações › "Menu do WhatsApp") também é exercitada pela spec: o módulo instalado é pré-condição, e com ele desligado a porta some do menu (`modulo: "menu_whatsapp"` no catálogo de navegação).
+
+## J59 - Redes sociais: recurso ligado e desligado `[P1]` (2026-11-05)
+
+| # | Jornada | Prova |
+|---|---|---|
+| J59.1 | Com o recurso `redes_sociais` LIGADO na instalação, o manager abre Conexões e vê a aba "Redes sociais" com o header citando Instagram e Messenger | **PASS** - `conexoes-abas.spec.ts` (caso novo), contra o app real. Evidência: `evidence/canais/conexoes/06-flag-ligada.png` |
+| J59.2 | Com a flag apagada da instalação (recurso desligado), a aba some e o deep-link `?aba=sociais` cai na aba padrão — quem já conectou segue com o atendimento | **PASS** - `conexoes-abas.spec.ts`. Evidência: `evidence/canais/conexoes/07-flag-desligada.png` |
