@@ -2,8 +2,51 @@ import * as http from "node:http";
 import type { AddressInfo } from "node:net";
 
 import { test, expect } from "./helpers/test";
+import { createClient } from "@supabase/supabase-js";
 
 import { lerCreds, loginComoAdmin } from "./helpers/login-admin";
+import { carregarEnvLocal } from "../../scripts/lib/env-de-teste";
+
+// ── Pré-condição da JORNADA: a aba existe só com a flag ligada (Addon #1) ───
+//
+// O interruptor `redes_sociais` nasce DESLIGADO (platform_config sem a linha =
+// falha fechada), e com ele desligado `?aba=sociais` cai na aba padrão — o
+// RedesSociaisClient nunca monta e o aviso de desfecho que esta spec segue
+// ("Autorização concluída") não existe. Numa base fresca (o CI semeia do zero)
+// a spec então reprovaria por FALTA DE CENÁRIO, não pelo defeito que ela mede.
+// É a mesma doutrina das outras specs de fora: quem precisa de estado semeia o
+// PRÓPRIO estado — aqui, a flag da instalação, capturada e restaurada.
+const envDaSuporte = carregarEnvLocal();
+const admin = createClient(
+  envDaSuporte.NEXT_PUBLIC_SUPABASE_URL ?? "",
+  envDaSuporte.SUPABASE_SERVICE_ROLE_KEY ?? "",
+  { auth: { autoRefreshToken: false, persistSession: false } },
+);
+const CHAVE_DA_FLAG = "MODULO_REDES_SOCIAIS";
+let flagOriginal: { existia: boolean; valor: string | null };
+
+test.beforeAll(async () => {
+  const { data, error: erroLeitura } = await admin
+    .from("platform_config")
+    .select("valor")
+    .eq("chave", CHAVE_DA_FLAG);
+  if (erroLeitura) throw new Error(`ler a flag do módulo: ${erroLeitura.message}`);
+  flagOriginal = { existia: (data?.length ?? 0) > 0, valor: data?.[0]?.valor ?? null };
+
+  const { error } = await admin
+    .from("platform_config")
+    .upsert({ chave: CHAVE_DA_FLAG, valor: "ligado" } as never, { onConflict: "chave" });
+  if (error) throw new Error(`ligar a flag do módulo: ${error.message}`);
+});
+
+test.afterAll(async () => {
+  const { error } = flagOriginal.existia
+    ? await admin
+        .from("platform_config")
+        .upsert({ chave: CHAVE_DA_FLAG, valor: flagOriginal.valor } as never, { onConflict: "chave" })
+    : await admin.from("platform_config").delete().eq("chave", CHAVE_DA_FLAG);
+  if (error) throw new Error(`restaurar a flag do módulo: ${error.message}`);
+});
 
 /**
  * VOLTAR DA AUTORIZAÇÃO DE REDE SOCIAL NÃO DESLOGA — e diz o desfecho (#1579).
@@ -68,7 +111,11 @@ test("voltar da autorização de rede social não manda para o /login e mostra o
     expect(url).toContain("aba=sociais");
     expect(url, "a ponte refletiu o connect_token na URL").not.toContain("SEGREDO");
 
-    await expect(page.getByText(/Autorização concluída/)).toBeVisible({ timeout: 20_000 });
+    // O regex era `/Autorização concluída/` e o Addon #1 acrescentou o SEGUINDE
+    // banner ao lado do original ("…! Agora ative o recebimento…") — dois
+    // elementos, strict mode. O conserto é no LOCATOR e nunca no produto (doutrina
+    // dos locators): ancora no texto do banner ORIGINAL que esta spec media.
+    await expect(page.getByText(/Autorização concluída\. Confira/)).toBeVisible({ timeout: 20_000 });
   } finally {
     await new Promise<void>((r) => servidor.close(() => r()));
   }
