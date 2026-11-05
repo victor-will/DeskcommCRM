@@ -8,6 +8,55 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.99.0] — 2026-11-05
+
+### Adicionado
+
+- **O aviso de caso no WhatsApp pode ir para o responsável do atendimento, não só para o número da empresa** Hoje o aviso de caso e o de proposta saem para um único número, o da empresa. Agora o destino pode ser o **responsável**, resolvido na hora do envio: responsável da conversa, depois dono do negócio aberto, depois dono da carteira do contato e, se nenhum tiver WhatsApp cadastrado, o número da empresa. O telefone de cada pessoa é cadastrado na própria tela de configuração dos avisos. Quem já usa o número fixo não precisa mudar nada — é o padrão, e não há migração de dados. Os comandos RESPONDER e PERGUNTAR continuam valendo só no número da empresa: o aviso que vai para o celular de alguém da equipe diz para abrir o link do caso. Contribuição de @webtecnica (#3803).
+
+- **Automação "Atribuir a um atendente" pode mandar o negócio para o responsável dele ou para o dono da carteira do cliente** A ação de atribuir só sabia escolher entre uma pessoa fixa e um rodízio de nomes:
+  quem fazia pós-venda precisava de uma automação por vendedor, e quem usava rodízio
+  via todo negócio cair na mesma fila, mesmo quando o cliente já tinha dono.
+
+  O modo novo **Destino dinâmico** entrega o negócio a quem já está com ele: o
+  **responsável do negócio** e, se não houver, o **dono da carteira do cliente**.
+  Quem recebe depende do negócio que disparou a regra, não de um nome escrito nela.
+  Quem não pode receber (saiu da equipe ou só tem acesso de leitura) é pulado, e a
+  regra segue a lista.
+
+  Sem ninguém do negócio disponível, a atribuição cai no **fallback**, que é
+  obrigatório: uma pessoa fixa ou o rodízio de sempre. A Atividade passa a dizer
+  qual destino decidiu, em vez de deixar o negócio sem responsável em silêncio.
+
+  As opções de **passar também o contato (carteira)** e **as conversas abertas**
+  valem para os destinos novos do mesmo jeito que valem para a pessoa fixa.
+
+  Contribuição de @webtecnica (#3804).
+
+- **Menu de texto no WhatsApp que responde sem IA** A organização ganha um menu de opções em texto no WhatsApp: o cliente responde com um número e recebe na hora os horários de hoje, os preços, o convite para marcar horário ou a passagem direto para a equipe — tudo por mensagem comum, sem IA no caminho, funcionando em qualquer WAHA, inclusive no Core. O recurso nasce desligado: primeiro quem administra a instalação o instala e concede em Recursos opcionais, e só então o cliente ativa no painel dele, em Configurações › Menu do WhatsApp, onde também monta e reordena os itens do cardápio. Ele não substitui a IA: quando a organização tem agente de IA configurado, quem responde à conversa é a IA — o menu é o piso para quem não tem (ou não quer) credencial de IA.
+
+- **Supabase próprio no mesmo servidor sobrevive às atualizações** Quem roda o Supabase no mesmo servidor do CRM, em outro compose, perdia a conexão com o banco a cada atualização: os contêineres eram recriados fora da rede do Supabase e o worker caía, o que podia até desfazer a atualização. Agora basta declarar `SUPABASE_DOCKER_NETWORK` (por exemplo `supabase_default`) no `.env` e o kit liga o CRM a essa rede em toda subida e atualização, inclusive o agente de voz (opcional) e o backup e a atualização do banco feitos pelo próprio kit, sem precisar declarar `PSQL_DOCKER_NETWORK` também. Se a chave está no `.env` e a rede não existe no servidor, a atualização avisa em vez de seguir calada. Sem a variável, nada muda.
+
+  Contribuição de @kristhianlumai-lgtm (#3796).
+
+- **Redes sociais no atendimento (Instagram e Messenger)** A organização passa a receber as mensagens diretas do Instagram e do Messenger na mesma caixa de entrada do WhatsApp: os três canais lado a lado, no mesmo atendimento, sem abrir outro aplicativo. O recurso nasce desligado e quem administra a instalação o ativa em Recursos opcionais, no Admin — ligado, a aba "Redes sociais" aparece em Conexões; desligado, a aba some e novas conexões são barradas, mas os perfis já conectados continuam recebendo normalmente. Quem opera o CRM conecta as contas sozinho pelo painel: a chave do provedor já vem configurada na implantação, e o passo a passo é autorizar cada rede e ativar o recebimento no cartão da conta. Não custa nada para o cliente além da conta gratuita do provedor, que cobre até 2 contas conectadas.
+
+- **Setor de atendimento vira destino: a conversa ganha setor e o setor ganha horário** O setor de atendimento agrupava os atendentes e não mudava quem recebia as conversas. Agora ele é destino: uma conversa pode pertencer a um setor, e a distribuição automática passa a respeitar quem atende aquele setor e o horário dele — e não apenas o número por onde o cliente chegou. Fora do horário do setor a conversa não se perde: ela espera a abertura, na Fila. Um atendente pode atender mais de um setor (é o caso da recepção, que cobre comercial e financeiro). Sem setor definido, tudo continua exatamente como antes, e o módulo de setores segue desligado por padrão. Contribuição de @webtecnica (#3817).
+
+### Corrigido
+
+- **O card do funil passa a se chamar "negócio" em toda a tela** O mesmo card tinha dois nomes. O formulário de criar dizia "Novo Lead" e "Criar lead", mas o aviso dentro dele já dizia "Este contato já tem um negócio aberto". E "lead", em vendas, é a pessoa, não a venda.
+
+  Agora o card se chama "negócio" em tudo: "Novo negócio", "Criar negócio", "Negócio criado", "Editar negócio", "Ações do negócio", o quadro vazio ("Nenhum negócio neste funil ainda.") e a lateral da conversa ("Negócios recentes"). Esses textos também dizem "funil" onde diziam "pipeline". A barra de seleção em lote passa a usar o nome que o funil dá à venda, e não mais o nome da pessoa: num funil que chama a venda de "Pedido" (Configurações › Funis), ela diz "1 Pedido selecionado", e não "1 Cliente selecionado".
+
+  Nada muda no banco, nas rotas nem nas automações. O gatilho de follow-up "Lead criado" continua com o mesmo nome.
+
+  Você não precisa mudar nada.
+
+  Contribuição de @webtecnica (#3820, #3811).
+
+- **O Inbox para de dar erro de hidratação quando a contagem das abas chega durante o carregamento** O número ao lado do nome das abas do Inbox é buscado no servidor de dados e só existe no navegador. Quando essa resposta chegava enquanto a página ainda estava sendo montada, o contador aparecia numa etapa em que a tela ainda era a do servidor — e o React acusava a divergência (o erro `#418`), com a página recarregando a árvore. Agora o contador só entra depois que a página terminou de montar, e a contagem continua aparecendo normalmente. Medido em build de produção: 543 cargas, 3 erros antes do conserto; o caso virou teste — HTML do servidor e hidratação de verdade. Contribuição de @webtecnica (#3736).
+
 ## [1.98.0] — 2026-11-01
 
 ### ⚠️ Requer atenção
@@ -13830,7 +13879,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.98.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.99.0...HEAD
+[1.99.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.98.0...v1.99.0
 [1.98.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.97.0...v1.98.0
 [1.97.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.96.0...v1.97.0
 [1.96.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.95.0...v1.96.0
